@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CE 353 Quiz</title>
+<style>
+  :root { --green:#1b5e20; --ink:#1e2a22; --muted:#5b665e; --line:#cfd8d1; --bg:#f4f7f4; --err:#b3261e; --ok:#1b5e20; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--green); color:#fff; padding:14px 16px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; font-size:13px; opacity:.9; }
+  main { max-width:460px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; }
+  label { display:block; font-weight:600; font-size:14px; margin:14px 0 6px; }
+  input { width:100%; font-size:17px; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  input:focus { outline:2px solid var(--green); outline-offset:1px; }
+  button { width:100%; margin-top:18px; font-size:17px; font-weight:600; padding:14px; border:0; border-radius:8px; background:var(--green); color:#fff; }
+  button:disabled { background:#9db3a0; }
+  .hint { font-size:13px; color:var(--muted); margin:6px 0 0; }
+  #loc { font-size:14px; margin:14px 0 0; padding:10px 12px; border-radius:8px; background:#eef3ee; }
+  #loc.bad { background:#fbeceb; color:var(--err); }
+  #loc.good { background:#e6f2e7; color:var(--ok); }
+  #msg { margin-top:14px; font-size:15px; min-height:20px; }
+  #msg.err { color:var(--err); } #msg.ok { color:var(--ok); }
+  ul { padding-left:18px; margin:8px 0 0; font-size:14px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>CE 353 Reinforced Concrete Design: Quiz</h1>
+  <p>KNUST, Department of Civil Engineering</p>
+</header>
+<main>
+  <div class="card" id="card">
+    <div id="nocode" hidden>
+      <strong>Scan the QR code on the lecture-room screen.</strong>
+      <p class="hint">This page only works from that QR code, and only while you are in the lecture room.</p>
+    </div>
+    <form id="f" hidden autocomplete="off">
+      <label for="name">Full name</label>
+      <input id="name" name="name" autocomplete="name" required minlength="3" maxlength="80">
+      <label for="idx">Index number</label>
+      <input id="idx" name="idx" inputmode="numeric" pattern="[0-9]*" required maxlength="9">
+      <label for="code">Room code shown on the screen</label>
+      <input id="code" name="code" inputmode="numeric" pattern="[0-9]*" required maxlength="6" autocomplete="off">
+      <p class="hint">The code changes every minute. Type the one on the screen now.</p>
+      <div id="loc">Checking your location...</div>
+      <button id="go" type="submit" disabled>Start quiz</button>
+      <div id="msg" role="status" aria-live="polite"></div>
+      <ul>
+        <li>Allow location access when your browser asks. Turn on GPS if it is off.</li>
+        <li>You have 10 minutes once the quiz opens. Sign in with your KNUST account.</li>
+        <li>One attempt per index number.</li>
+      </ul>
+    </form>
+  </div>
+</main>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbz5eDIWKgR1cKuTKzKCu_HIky4g_hIT6c_civEEX-jo-yvkA9Ho2xFjTNP9-WIIoesV/exec';
+  var params = new URLSearchParams(location.search);
+  var token = params.get('t') || '';
+  try { if (token) sessionStorage.setItem('ce353t', token); else token = sessionStorage.getItem('ce353t') || ''; } catch (e) {}
+  var form = document.getElementById('f'), nocode = document.getElementById('nocode');
+  var loc = document.getElementById('loc'), msg = document.getElementById('msg'), go = document.getElementById('go');
+  var pos = null;
+
+  function dev() {
+    try {
+      var d = localStorage.getItem('ce353dev');
+      if (!d) { d = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).slice(0, 36); localStorage.setItem('ce353dev', d); }
+      return d;
+    } catch (e) { return 'nostore-' + (window.__d = window.__d || String(Math.random()).slice(2, 14)); }
+  }
+  function setLoc(text, cls) { loc.textContent = text; loc.className = cls || ''; }
+  function getPos(maxAge) {
+    return new Promise(function (res, rej) {
+      if (!navigator.geolocation) { rej({ message: 'This browser has no location support.' }); return; }
+      navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 20000, maximumAge: maxAge });
+    });
+  }
+  function locate() {
+    setLoc('Getting your location...');
+    getPos(0).then(function (p) {
+      pos = p.coords;
+      setLoc('Location found (accuracy about ' + Math.round(pos.accuracy) + ' m).', 'good');
+      go.disabled = false;
+    }, function (e) {
+      go.disabled = true;
+      var why = e && e.code === 1 ? 'Location is blocked. Allow location for this site in your browser settings, then reload.' : 'Could not get your location. Turn on GPS and reload.';
+      setLoc(why, 'bad');
+    });
+  }
+
+  if (!token) { nocode.hidden = false; return; }
+  form.hidden = false;
+  history.replaceState(null, '', location.pathname);   // keep the token out of the address bar and history
+  locate();
+
+  form.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    go.disabled = true; msg.className = ''; msg.textContent = 'Checking...';
+    getPos(10000).catch(function () { return { coords: pos }; }).then(function (p) {
+      var c = (p && p.coords) || pos;
+      if (!c) { throw new Error('Location is needed.'); }
+      var body = {
+        action: 'enter', token: token,
+        name: document.getElementById('name').value, idx: document.getElementById('idx').value,
+        code: document.getElementById('code').value, dev: dev(),
+        lat: c.latitude, lon: c.longitude, acc: c.accuracy
+      };
+      return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
+    }).then(function (r) { return r.json(); }).then(function (j) {
+      if (j && j.ok) {
+        msg.className = 'ok'; msg.textContent = 'Opening your quiz. Sign in with your KNUST account if asked.';
+        setTimeout(function () { location.replace(j.url); }, 600);
+      } else {
+        msg.className = 'err'; msg.textContent = (j && j.msg) || 'Something went wrong.'; go.disabled = false;
+      }
+    }).catch(function (e) {
+      msg.className = 'err'; msg.textContent = (e && e.message) || 'Network problem. Try again.'; go.disabled = false;
+    });
+  });
+})();
+</script>
+</body>
+</html>

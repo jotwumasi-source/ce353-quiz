@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CE 353 Quiz Console</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root { --green:#1b5e20; --ink:#1e2a22; --muted:#5b665e; --line:#cfd8d1; --bg:#f4f7f4; --err:#b3261e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--green); color:#fff; padding:12px 18px; display:flex; justify-content:space-between; align-items:center; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  main { max-width:1000px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+  label { font-size:13px; font-weight:600; display:block; margin-bottom:4px; }
+  input { font-size:16px; padding:10px; border:1px solid var(--line); border-radius:8px; width:170px; }
+  button { font-size:16px; font-weight:600; padding:11px 18px; border:0; border-radius:8px; background:var(--green); color:#fff; cursor:pointer; }
+  button.alt { background:#fff; color:var(--green); border:1px solid var(--green); }
+  button.danger { background:var(--err); }
+  button:disabled { opacity:.5; cursor:default; }
+  #stage { display:none; text-align:center; }
+  #stage.on { display:block; }
+  #qr { display:inline-block; padding:14px; background:#fff; border:1px solid var(--line); border-radius:10px; }
+  #qr img, #qr canvas { display:block; }
+  #code { font-size:clamp(56px,12vw,120px); font-weight:700; letter-spacing:.12em; color:var(--green); font-variant-numeric:tabular-nums; margin:8px 0 0; }
+  .meta { color:var(--muted); font-size:15px; margin:6px 0; }
+  .big { font-size:22px; font-weight:600; }
+  #note { font-size:14px; margin-top:8px; } .warn { color:var(--err); }
+  .split { display:flex; gap:28px; justify-content:center; align-items:center; flex-wrap:wrap; }
+</style>
+</head>
+<body>
+<header><h1>CE 353 Quiz Console</h1><span id="clock" class="meta" style="color:#fff"></span></header>
+<main>
+  <div class="card" id="setup">
+    <div class="row">
+      <div><label for="key">Admin key</label><input id="key" type="password" autocomplete="off"></div>
+      <div><label for="radius">Room radius (m)</label><input id="radius" type="number" value="30" min="10" max="500" style="width:110px"></div>
+      <div><label for="minutes">Session length (min)</label><input id="minutes" type="number" value="25" min="5" max="120" style="width:110px"></div>
+      <button id="start">Start session here</button>
+      <button id="log" class="alt">Download log (CSV)</button>
+    </div>
+    <p class="meta">Press Start while standing in the lecture room. This device's location becomes the centre of the allowed area, so use a phone with GPS on if you can. Then project this page.</p>
+    <div id="note"></div>
+  </div>
+
+  <div class="card" id="stage">
+    <div class="split">
+      <div><div id="qr"></div><div class="meta">Scan to open the quiz</div></div>
+      <div>
+        <div class="meta">Room code (type this on the phone)</div>
+        <div id="code">------</div>
+        <div class="meta"><span id="left"></span></div>
+      </div>
+    </div>
+    <p class="big"><span id="entered">0</span> students entered</p>
+    <p class="meta" id="info"></p>
+    <button id="stop" class="danger">Stop session</button>
+  </div>
+</main>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbz5eDIWKgR1cKuTKzKCu_HIky4g_hIT6c_civEEX-jo-yvkA9Ho2xFjTNP9-WIIoesV/exec';
+  var STUDENT = new URL('./', location.href).href;   // the student page sits next to this one
+  var key = document.getElementById('key');
+  try { key.value = sessionStorage.getItem('adm') || ''; } catch (e) {}
+  var note = document.getElementById('note'), stage = document.getElementById('stage');
+  var qrEl = document.getElementById('qr'), qr = null, lastTok = null, timer = null;
+
+  function post(body) {
+    body.key = key.value;
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  function say(t, bad) { note.textContent = t; note.className = bad ? 'warn' : ''; }
+  setInterval(function () { document.getElementById('clock').textContent = new Date().toLocaleTimeString(); }, 1000);
+
+  function tick() {
+    post({ action: 'tick' }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Error', true); return; }
+      if (!j.active) { stage.classList.remove('on'); clearInterval(timer); timer = null; say('No active session. Press Start to begin.'); return; }
+      stage.classList.add('on');
+      if (j.token !== lastTok) {
+        lastTok = j.token; qrEl.innerHTML = '';
+        qr = new QRCode(qrEl, { text: STUDENT + '?t=' + j.token, width: 360, height: 360, correctLevel: QRCode.CorrectLevel.M });
+      }
+      document.getElementById('code').textContent = j.code;
+      document.getElementById('left').textContent = 'New code in ' + j.codeLeft + ' s';
+      document.getElementById('entered').textContent = j.entered;
+      document.getElementById('info').textContent = 'Allowed radius ' + j.radius + ' m. Anchor accuracy about ' + Math.round(j.anchorAcc) + ' m. Session closes in ' + j.minutesLeft + ' min.';
+    }).catch(function () { say('Network problem; retrying.', true); });
+  }
+  function run() { if (!timer) { tick(); timer = setInterval(tick, 4000); } }
+
+  document.getElementById('start').addEventListener('click', function () {
+    if (!key.value) { say('Enter the admin key.', true); return; }
+    try { sessionStorage.setItem('adm', key.value); } catch (e) {}
+    say('Getting this device\'s location...');
+    navigator.geolocation.getCurrentPosition(function (p) {
+      post({ action: 'start', lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy,
+             radius: document.getElementById('radius').value, minutes: document.getElementById('minutes').value }).then(function (j) {
+        if (!j.ok) { say(j.msg || 'Could not start.', true); return; }
+        say('Session started. Anchor accuracy about ' + Math.round(p.coords.accuracy) + ' m' + (p.coords.accuracy > 30 ? ' (weak: use a phone with GPS, or widen the radius)' : '') + '.', p.coords.accuracy > 30);
+        lastTok = null; run();
+      });
+    }, function () { say('Location is blocked. Allow location for this page.', true); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+  document.getElementById('stop').addEventListener('click', function () {
+    post({ action: 'stop' }).then(function () { tick(); say('Session stopped.'); });
+  });
+  document.getElementById('log').addEventListener('click', function () {
+    post({ action: 'log' }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Error', true); return; }
+      var esc = function (s) { return '"' + String(s).replace(/"/g, '""') + '"'; };
+      var lines = ['time,name,index,set,distance_m,accuracy_m'];
+      j.rows.forEach(function (r) { lines.push([new Date(r.ts).toISOString(), esc(r.name), r.idx, r.set, r.dist, r.acc].join(',')); });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
+      a.download = 'ce353_quiz_log.csv'; a.click();
+    });
+  });
+  if (key.value) { post({ action: 'tick' }).then(function (j) { if (j.ok && j.active) run(); }); }
+})();
+</script>
+</body>
+</html>
