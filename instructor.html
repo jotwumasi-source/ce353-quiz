@@ -99,6 +99,7 @@
     if (!key.value) { say('Enter the admin key.', true); return; }
     try { sessionStorage.setItem('adm', key.value); } catch (e) {}
     var radius = document.getElementById('radius').value, minutes = document.getElementById('minutes').value;
+    if (+radius > 500 || +radius < 10) { say('Room radius must be between 10 and 500 m (a larger value is ignored and replaced by 30 m).', true); return; }
     function begin(lat, lon, acc) {
       post({ action: 'start', lat: lat, lon: lon, acc: acc, radius: radius, minutes: minutes }).then(function (j) {
         if (!j.ok) { say(j.msg || 'Could not start.', true); return; }
