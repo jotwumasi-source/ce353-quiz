@@ -40,6 +40,7 @@
       <div><label for="key">Admin key</label><input id="key" type="password" autocomplete="off"></div>
       <div><label for="radius">Room radius (m)</label><input id="radius" type="number" value="30" min="10" max="500" style="width:110px"></div>
       <div><label for="minutes">Session length (min)</label><input id="minutes" type="number" value="25" min="5" max="120" style="width:110px"></div>
+      <div><label for="manual">Or paste room coordinates (lat, lon)</label><input id="manual" type="text" placeholder="6.2077, -1.6711" style="width:190px"></div>
       <button id="start">Start session here</button>
       <button id="log" class="alt">Download log (CSV)</button>
     </div>
@@ -97,15 +98,24 @@
   document.getElementById('start').addEventListener('click', function () {
     if (!key.value) { say('Enter the admin key.', true); return; }
     try { sessionStorage.setItem('adm', key.value); } catch (e) {}
-    say('Getting this device\'s location...');
-    navigator.geolocation.getCurrentPosition(function (p) {
-      post({ action: 'start', lat: p.coords.latitude, lon: p.coords.longitude, acc: p.coords.accuracy,
-             radius: document.getElementById('radius').value, minutes: document.getElementById('minutes').value }).then(function (j) {
+    var radius = document.getElementById('radius').value, minutes = document.getElementById('minutes').value;
+    function begin(lat, lon, acc) {
+      post({ action: 'start', lat: lat, lon: lon, acc: acc, radius: radius, minutes: minutes }).then(function (j) {
         if (!j.ok) { say(j.msg || 'Could not start.', true); return; }
-        say('Session started. Anchor accuracy about ' + Math.round(p.coords.accuracy) + ' m' + (p.coords.accuracy > 30 ? ' (weak: use a phone with GPS, or widen the radius)' : '') + '.', p.coords.accuracy > 30);
+        say('Session started. Anchor accuracy about ' + Math.round(acc) + ' m' + (acc > 30 ? ' (weak: widen the radius or use a phone with GPS)' : '') + '.', acc > 30);
         lastTok = null; run();
       });
-    }, function () { say('Location is blocked. Allow location for this page.', true); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    }
+    var man = document.getElementById('manual').value.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
+    if (man) { begin(parseFloat(man[1]), parseFloat(man[2]), 10); return; }
+    say('Getting this device\'s location...');
+    navigator.geolocation.getCurrentPosition(function (p) {
+      begin(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
+    }, function (e) {
+      var m = e && e.code === 1 ? 'Chrome is blocking location for this page.' :
+              e && e.code === 3 ? 'Location timed out.' : 'This computer cannot work out its location (Windows Location is probably off).';
+      say(m + ' Paste the room coordinates in the box instead: on a phone open Google Maps, press and hold on the room, then copy the numbers shown.', true);
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
   });
   document.getElementById('stop').addEventListener('click', function () {
     post({ action: 'stop' }).then(function () { tick(); say('Session stopped.'); });
