@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CE 353 Quiz: get your phone ready</title>
+<style>
+  :root { --green:#1b5e20; --ink:#1e2a22; --muted:#5b665e; --line:#cfd8d1; --bg:#f4f7f4; --err:#b3261e; --ok:#1b5e20; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--green); color:#fff; padding:14px 16px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; font-size:13px; opacity:.9; }
+  main { max-width:460px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  h2 { margin:0 0 6px; font-size:16px; }
+  p { margin:6px 0; font-size:15px; line-height:1.45; }
+  a.btn, button { display:block; width:100%; margin-top:12px; font-size:16px; font-weight:600; padding:13px; border:0; border-radius:8px; background:var(--green); color:#fff; text-align:center; text-decoration:none; }
+  #res { margin-top:12px; font-size:14px; padding:10px 12px; border-radius:8px; background:#eef3ee; display:none; }
+  #res.good { background:#e6f2e7; color:var(--ok); display:block; }
+  #res.bad { background:#fbeceb; color:var(--err); display:block; }
+  ul { padding-left:18px; margin:6px 0 0; font-size:14px; color:var(--muted); line-height:1.5; }
+  .hint { font-size:13px; color:var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <h1>CE 353 Quiz: get your phone ready</h1>
+  <p>Do this before class. It takes two minutes.</p>
+</header>
+<main>
+  <div class="card">
+    <h2>1. Allow location</h2>
+    <p>The quiz opens only for students who are in the lecture room, so your phone must be allowed to share its location with this site.</p>
+    <button id="t" type="button">Test my location</button>
+    <div id="res" role="status" aria-live="polite"></div>
+    <p class="hint">This test shows you the result only. Nothing is sent to the lecturer.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Sign in with your KNUST account</h2>
+    <p>The quiz forms accept only your KNUST school email (ending in knust.edu.gh). Sign in now and tick <strong>Stay signed in</strong> if you are asked.</p>
+    <a class="btn" href="https://forms.office.com/" target="_blank" rel="noopener">Open Microsoft Forms and sign in</a>
+    <p class="hint">You should see a page that says Microsoft Forms with your name at the top right. If it says your account is not allowed, see the lecturer before the quiz.</p>
+  </div>
+
+  <div class="card">
+    <h2>3. On quiz day</h2>
+    <ul>
+      <li>Use the same phone and the same browser (Chrome or Safari) that you used here.</li>
+      <li>Do not use private or incognito mode.</li>
+      <li>Charge your phone and turn on mobile data or Wi-Fi.</li>
+      <li>Know your index number. You will type it, your full name, and the room code from the screen.</li>
+      <li>Scan the QR code on the lecture-room screen. A QR code from a friend or from a photo will not work.</li>
+      <li>You get 10 minutes. The questions come one at a time and you cannot go back.</li>
+    </ul>
+  </div>
+</main>
+<script>
+(function () {
+  var b = document.getElementById('t'), r = document.getElementById('res');
+  b.addEventListener('click', function () {
+    r.className = ''; r.textContent = '';
+    if (!navigator.geolocation) { r.className = 'bad'; r.textContent = 'This browser cannot share location. Open this page in Chrome or Safari.'; return; }
+    b.disabled = true; b.textContent = 'Checking...';
+    navigator.geolocation.getCurrentPosition(function (p) {
+      b.disabled = false; b.textContent = 'Test my location again';
+      var a = Math.round(p.coords.accuracy);
+      r.className = a <= 100 ? 'good' : 'bad';
+      r.textContent = a <= 100
+        ? 'Location works. Accuracy about ' + a + ' m. You are ready.'
+        : 'Location works but is weak (about ' + a + ' m). Turn on GPS or Precise location and test again.';
+    }, function (e) {
+      b.disabled = false; b.textContent = 'Test my location again';
+      r.className = 'bad';
+      r.textContent = e && e.code === 1
+        ? 'Location is blocked. Tap the lock or settings icon next to the web address, set Location to Allow, then test again. On iPhone also check Settings > Privacy > Location Services.'
+        : 'Your phone could not find its location. Turn on Location / GPS in the phone settings, then test again.';
+    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+  });
+})();
+</script>
+</body>
+</html>
