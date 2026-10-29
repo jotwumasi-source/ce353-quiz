@@ -26,6 +26,12 @@
   #msg { margin-top:14px; font-size:15px; min-height:20px; }
   #msg.err { color:var(--err); } #msg.ok { color:var(--ok); }
   ul { padding-left:18px; margin:8px 0 0; font-size:14px; color:var(--muted); }
+  #gate { position:fixed; inset:0; background:rgba(15,30,20,.72); display:flex; align-items:center; justify-content:center; padding:20px; z-index:10; }
+  #gate[hidden] { display:none; }
+  #gate .box { background:#fff; border-radius:12px; max-width:380px; width:100%; padding:20px; }
+  #gate h2 { margin:0 0 8px; font-size:19px; }
+  #gate p { margin:8px 0; font-size:15px; line-height:1.4; }
+  #gate .steps { font-size:14px; color:var(--err); background:#fbeceb; border-radius:8px; padding:10px 12px; }
 </style>
 </head>
 <body>
@@ -58,6 +64,14 @@
     </form>
   </div>
 </main>
+<div id="gate" hidden>
+  <div class="box" role="dialog" aria-modal="true" aria-labelledby="gt">
+    <h2 id="gt">Allow location to start the quiz</h2>
+    <p>This quiz only opens for students who are in the lecture room. Your browser will now ask for your location. Tap <strong>Allow</strong> (choose "While using the app" or "Precise" if offered). Your location is used once to check the room and is not stored beyond the distance.</p>
+    <div class="steps" id="gatehelp" hidden></div>
+    <button id="allow" type="button">Allow location</button>
+  </div>
+</div>
 <script>
 (function () {
   var API = 'https://script.google.com/macros/s/AKfycbz5eDIWKgR1cKuTKzKCu_HIky4g_hIT6c_civEEX-jo-yvkA9Ho2xFjTNP9-WIIoesV/exec';
@@ -82,23 +96,30 @@
       navigator.geolocation.getCurrentPosition(res, rej, { enableHighAccuracy: true, timeout: 20000, maximumAge: maxAge });
     });
   }
+  var gate = document.getElementById('gate'), gatehelp = document.getElementById('gatehelp');
   function locate() {
     setLoc('Getting your location...');
     getPos(0).then(function (p) {
-      pos = p.coords;
+      pos = p.coords; gate.hidden = true;
       setLoc('Location found (accuracy about ' + Math.round(pos.accuracy) + ' m).', 'good');
       go.disabled = false;
     }, function (e) {
       go.disabled = true;
       var why = e && e.code === 1 ? 'Location is blocked. Allow location for this site in your browser settings, then reload.' : 'Could not get your location. Turn on GPS and reload.';
       setLoc(why, 'bad');
+      gate.hidden = false;
+      gatehelp.hidden = false;
+      gatehelp.textContent = e && e.code === 1
+        ? 'Location is blocked for this site. Tap the lock or settings icon next to the web address, set Location to Allow, then tap the button below. On iPhone: Settings > Privacy > Location Services must be on.'
+        : 'Your phone could not find its location. Turn on Location / GPS in the phone settings, then tap the button below.';
     });
   }
 
   if (!token) { nocode.hidden = false; return; }
   form.hidden = false;
   history.replaceState(null, '', location.pathname);   // keep the token out of the address bar and history
-  locate();
+  gate.hidden = false;                                  // always ask first; the browser prompt follows the tap
+  document.getElementById('allow').addEventListener('click', function () { gatehelp.hidden = true; locate(); });
 
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
