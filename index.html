@@ -58,7 +58,7 @@
       <div id="msg" role="status" aria-live="polite"></div>
       <ul>
         <li>Allow location access when your browser asks. Turn on GPS if it is off.</li>
-        <li>You have 10 minutes once the quiz opens. Sign in with your KNUST account.</li>
+        <li>The quiz is timed from the moment it opens. Sign in with your KNUST account.</li>
         <li>One attempt per index number.</li>
       </ul>
     </form>
@@ -80,7 +80,19 @@
   try { if (token) sessionStorage.setItem('ce353t', token); else token = sessionStorage.getItem('ce353t') || ''; } catch (e) {}
   var form = document.getElementById('f'), nocode = document.getElementById('nocode');
   var loc = document.getElementById('loc'), msg = document.getElementById('msg'), go = document.getElementById('go');
-  var pos = null;
+  var pos = null, geoOff = false;
+  // When the lecturer switches the geofence off (a problem in the room), the location step is skipped.
+  function checkGeo() {
+    fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'status' }) })
+      .then(function (r) { return r.json(); }).then(function (j) {
+        if (j && j.ok && j.geofence === false && !geoOff) {
+          geoOff = true; gate.hidden = true; go.disabled = false;
+          setLoc('The lecturer has switched the room check off. You can start the quiz.', 'good');
+        } else if (j && j.ok && j.geofence !== false && geoOff) {
+          geoOff = false; if (!pos) { go.disabled = true; setLoc('Checking your location...'); gate.hidden = false; }
+        }
+      }).catch(function () {});
+  }
 
   function dev() {
     try {
@@ -119,19 +131,20 @@
   form.hidden = false;
   history.replaceState(null, '', location.pathname);   // keep the token out of the address bar and history
   gate.hidden = false;                                  // always ask first; the browser prompt follows the tap
+  checkGeo(); setInterval(checkGeo, 6000);
   document.getElementById('allow').addEventListener('click', function () { gatehelp.hidden = true; locate(); });
 
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
     go.disabled = true; msg.className = ''; msg.textContent = 'Checking...';
-    getPos(10000).catch(function () { return { coords: pos }; }).then(function (p) {
+    (geoOff && !pos ? Promise.resolve({ coords: null }) : getPos(10000).catch(function () { return { coords: pos }; })).then(function (p) {
       var c = (p && p.coords) || pos;
-      if (!c) { throw new Error('Location is needed.'); }
+      if (!c && !geoOff) { throw new Error('Location is needed.'); }
       var body = {
         action: 'enter', token: token,
         name: document.getElementById('name').value, idx: document.getElementById('idx').value,
         code: document.getElementById('code').value, dev: dev(),
-        lat: c.latitude, lon: c.longitude, acc: c.accuracy
+        lat: c ? c.latitude : undefined, lon: c ? c.longitude : undefined, acc: c ? c.accuracy : undefined
       };
       return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
     }).then(function (r) { return r.json(); }).then(function (j) {

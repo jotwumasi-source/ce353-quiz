@@ -29,6 +29,8 @@
   .meta { color:var(--muted); font-size:15px; margin:6px 0; }
   .big { font-size:22px; font-weight:600; }
   #note { font-size:14px; margin-top:8px; } .warn { color:var(--err); }
+  #geo.off { color:var(--err); }
+  #geo.on { color:var(--green); }
   .split { display:flex; gap:28px; justify-content:center; align-items:center; flex-wrap:wrap; }
 </style>
 </head>
@@ -40,11 +42,10 @@
       <div><label for="key">Admin key</label><input id="key" type="password" autocomplete="off"></div>
       <div><label for="radius">Room radius (m)</label><input id="radius" type="number" value="30" min="10" max="500" style="width:110px"></div>
       <div><label for="minutes">Session length (min)</label><input id="minutes" type="number" value="25" min="5" max="120" style="width:110px"></div>
-      <div><label for="manual">Or paste room coordinates (lat, lon)</label><input id="manual" type="text" placeholder="6.2077, -1.6711" style="width:190px"></div>
-      <button id="start">Start session here</button>
+      <button id="start">Start session</button>
       <button id="log" class="alt">Download log (CSV)</button>
     </div>
-    <p class="meta">Press Start while standing in the lecture room. This device's location becomes the centre of the allowed area, so use a phone with GPS on if you can. Then project this page.</p>
+    <p class="meta">The venue is fixed at 6.6730470, -1.5643920 (6&deg;40'23.0"N 1&deg;33'51.8"W). Set the radius, press Start, then project this page. Students must be within the radius, plus a small allowance for GPS error.</p>
     <div id="note"></div>
   </div>
 
@@ -59,7 +60,13 @@
     </div>
     <p class="big"><span id="entered">0</span> students entered</p>
     <p class="meta" id="info"></p>
-    <button id="stop" class="danger">Stop session</button>
+    <p id="geo" class="big"></p>
+    <div class="row" style="justify-content:center">
+      <button id="geotoggle" class="alt">Turn off geofence</button>
+      <div><label for="newradius">Change radius (m)</label><input id="newradius" type="number" min="10" max="500" style="width:100px"></div>
+      <button id="setradius" class="alt">Apply radius</button>
+      <button id="stop" class="danger">Stop session</button>
+    </div>
   </div>
 </main>
 <script>
@@ -69,7 +76,7 @@
   var key = document.getElementById('key');
   try { key.value = sessionStorage.getItem('adm') || ''; } catch (e) {}
   var note = document.getElementById('note'), stage = document.getElementById('stage');
-  var qrEl = document.getElementById('qr'), qr = null, lastTok = null, timer = null;
+  var qrEl = document.getElementById('qr'), qr = null, lastTok = null, timer = null, geoOn = true;
 
   function post(body) {
     body.key = key.value;
@@ -90,7 +97,13 @@
       document.getElementById('code').textContent = j.code;
       document.getElementById('left').textContent = 'New code in ' + j.codeLeft + ' s';
       document.getElementById('entered').textContent = j.entered;
-      document.getElementById('info').textContent = 'Allowed radius ' + j.radius + ' m. Anchor accuracy about ' + Math.round(j.anchorAcc) + ' m. Session closes in ' + j.minutesLeft + ' min.';
+      document.getElementById('info').textContent = 'Allowed radius ' + j.radius + ' m around the fixed venue. Session closes in ' + j.minutesLeft + ' min.';
+      geoOn = j.geofence !== false;
+      var g = document.getElementById('geo');
+      g.textContent = geoOn ? 'Geofence ON: students must be in the room' : 'GEOFENCE OFF: anyone with the QR and code can enter';
+      g.className = 'big ' + (geoOn ? 'on' : 'off');
+      document.getElementById('geotoggle').textContent = geoOn ? 'Turn off geofence' : 'Turn geofence back on';
+      var nr = document.getElementById('newradius'); if (document.activeElement !== nr) nr.placeholder = j.radius;
     }).catch(function () { say('Network problem; retrying.', true); });
   }
   function run() { if (!timer) { tick(); timer = setInterval(tick, 4000); } }
@@ -100,23 +113,27 @@
     try { sessionStorage.setItem('adm', key.value); } catch (e) {}
     var radius = document.getElementById('radius').value, minutes = document.getElementById('minutes').value;
     if (+radius > 500 || +radius < 10) { say('Room radius must be between 10 and 500 m (a larger value is ignored and replaced by 30 m).', true); return; }
-    function begin(lat, lon, acc) {
-      post({ action: 'start', lat: lat, lon: lon, acc: acc, radius: radius, minutes: minutes }).then(function (j) {
-        if (!j.ok) { say(j.msg || 'Could not start.', true); return; }
-        say('Session started. Anchor accuracy about ' + Math.round(acc) + ' m' + (acc > 30 ? ' (weak: widen the radius or use a phone with GPS)' : '') + '.', acc > 30);
-        lastTok = null; run();
-      });
-    }
-    var man = document.getElementById('manual').value.match(/(-?\d+(?:\.\d+)?)\s*[, ]\s*(-?\d+(?:\.\d+)?)/);
-    if (man) { begin(parseFloat(man[1]), parseFloat(man[2]), 10); return; }
-    say('Getting this device\'s location...');
-    navigator.geolocation.getCurrentPosition(function (p) {
-      begin(p.coords.latitude, p.coords.longitude, p.coords.accuracy);
-    }, function (e) {
-      var m = e && e.code === 1 ? 'Chrome is blocking location for this page.' :
-              e && e.code === 3 ? 'Location timed out.' : 'This computer cannot work out its location (Windows Location is probably off).';
-      say(m + ' Paste the room coordinates in the box instead: on a phone open Google Maps, press and hold on the room, then copy the numbers shown.', true);
-    }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+    post({ action: 'start', radius: radius, minutes: minutes }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Could not start.', true); return; }
+      say('Session started. Radius ' + j.radius + ' m around the fixed venue.');
+      lastTok = null; run();
+    }).catch(function () { say('Network problem; try again.', true); });
+  });
+  document.getElementById('geotoggle').addEventListener('click', function () {
+    var turnOn = !geoOn;
+    if (!turnOn && !confirm('Turn OFF the geofence? Anyone who has the QR code and room code can then enter from anywhere.')) return;
+    post({ action: 'config', on: turnOn }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Could not change the geofence.', true); return; }
+      say(turnOn ? 'Geofence is back on.' : 'Geofence is OFF.', !turnOn); tick();
+    });
+  });
+  document.getElementById('setradius').addEventListener('click', function () {
+    var r = document.getElementById('newradius').value;
+    if (!r) { say('Type the new radius first.', true); return; }
+    post({ action: 'config', radius: r }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Could not change the radius.', true); return; }
+      document.getElementById('newradius').value = ''; say('Radius is now ' + j.radius + ' m.'); tick();
+    });
   });
   document.getElementById('stop').addEventListener('click', function () {
     post({ action: 'stop' }).then(function () { tick(); say('Session stopped.'); });
