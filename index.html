@@ -149,8 +149,9 @@
       return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) });
     }).then(function (r) { return r.json(); }).then(function (j) {
       if (j && j.ok) {
-        msg.className = 'ok'; msg.textContent = 'Opening your quiz. Sign in with your KNUST account if asked.';
-        setTimeout(function () { location.replace(j.url); }, 600);
+        msg.className = 'ok';
+        if (j.done) { msg.textContent = 'Your attendance for today is recorded. Thank you.'; }
+        else { msg.textContent = 'Opening your quiz. Sign in with your KNUST account if asked.'; setTimeout(function () { location.replace(j.url); }, 600); }
       } else {
         msg.className = 'err'; msg.textContent = (j && j.msg) || 'Something went wrong.'; go.disabled = false;
       }
