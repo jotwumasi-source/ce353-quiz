@@ -127,12 +127,23 @@
     });
   }
 
+  function openMode() {   // online class: no QR, no room code, no location
+    token = 'open'; geoOff = true;
+    var c = document.getElementById('code'); c.value = '000000'; c.required = false; c.style.display = 'none';
+    c.previousElementSibling.style.display = 'none'; c.nextElementSibling.style.display = 'none';
+    form.hidden = false; go.disabled = false; setLoc('Enter your name and index number, then submit.', 'good');
+    var tt = document.querySelector('#f ul'); if (tt) tt.style.display = 'none';
+  }
+  fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'status' }) })
+    .then(function (r) { return r.json(); }).then(function (j) { if (j && j.ok && j.open) openMode(); else classic(); }).catch(classic);
+  function classic() {
   if (!token) { nocode.hidden = false; return; }
   form.hidden = false;
   history.replaceState(null, '', location.pathname);   // keep the token out of the address bar and history
   gate.hidden = false;                                  // always ask first; the browser prompt follows the tap
   checkGeo(); setInterval(checkGeo, 6000);
   document.getElementById('allow').addEventListener('click', function () { gatehelp.hidden = true; locate(); });
+  }
 
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
