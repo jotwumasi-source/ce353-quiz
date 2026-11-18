@@ -26,6 +26,9 @@
   #msg { margin-top:14px; font-size:15px; min-height:20px; }
   #msg.err { color:var(--err); } #msg.ok { color:var(--ok); }
   ul { padding-left:18px; margin:8px 0 0; font-size:14px; color:var(--muted); }
+  a { color:var(--green); }
+  #ovr[hidden] { display:none; }
+  #ovr { margin-top:6px; padding:10px 12px; border:1px dashed var(--green); border-radius:8px; background:#f6faf6; }
   #gate { position:fixed; inset:0; background:rgba(15,30,20,.72); display:flex; align-items:center; justify-content:center; padding:20px; z-index:10; }
   #gate[hidden] { display:none; }
   #gate .box { background:#fff; border-radius:12px; max-width:380px; width:100%; padding:20px; }
@@ -44,6 +47,7 @@
     <div id="nocode" hidden>
       <strong>Scan the QR code on the lecture-room screen.</strong>
       <p class="hint">This page only works from that QR code, and only while you are in the lecture room.</p>
+      <p class="hint"><a href="#" id="ovrstart">Cannot scan the code? Lecturer override</a></p>
     </div>
     <form id="f" hidden autocomplete="off">
       <label for="name">Full name</label>
@@ -54,6 +58,12 @@
       <input id="code" name="code" inputmode="numeric" pattern="[0-9]*" required maxlength="6" autocomplete="off">
       <p class="hint">The code changes every minute. Type the one on the screen now.</p>
       <div id="loc">Checking your location...</div>
+      <p class="hint" id="ovrlinkp"><a href="#" id="ovrlink">Problem entering? Lecturer override</a></p>
+      <div id="ovr" hidden>
+        <label for="master">Lecturer key</label>
+        <input id="master" name="master" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <p class="hint">For the lecturer only. This skips the room checks (QR code, room code, location, one-device and attempt limits) for this student.</p>
+      </div>
       <button id="go" type="submit" disabled>Start quiz</button>
       <div id="msg" role="status" aria-live="polite"></div>
       <ul>
@@ -70,6 +80,7 @@
     <p>This quiz only opens for students who are in the lecture room. Your browser will now ask for your location. Tap <strong>Allow</strong> (choose "While using the app" or "Precise" if offered). Your location is used once to check the room and is not stored beyond the distance.</p>
     <div class="steps" id="gatehelp" hidden></div>
     <button id="allow" type="button">Allow location</button>
+    <p class="hint" style="text-align:center"><a href="#" id="gateovr">Cannot share location? Lecturer override</a></p>
   </div>
 </div>
 <script>
@@ -80,11 +91,12 @@
   try { if (token) sessionStorage.setItem('ce353t', token); else token = sessionStorage.getItem('ce353t') || ''; } catch (e) {}
   var form = document.getElementById('f'), nocode = document.getElementById('nocode');
   var loc = document.getElementById('loc'), msg = document.getElementById('msg'), go = document.getElementById('go');
-  var pos = null, geoOff = false;
+  var pos = null, geoOff = false, ovrOn = false;   // ovrOn: the lecturer-override panel is open
   // When the lecturer switches the geofence off (a problem in the room), the location step is skipped.
   function checkGeo() {
     fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'status' }) })
       .then(function (r) { return r.json(); }).then(function (j) {
+        if (ovrOn) return;   // the lecturer override is open: leave the form alone
         if (j && j.ok && j.geofence === false && !geoOff) {
           geoOff = true; gate.hidden = true; go.disabled = false;
           setLoc('The lecturer has switched the room check off. You can start the quiz.', 'good');
@@ -145,8 +157,50 @@
   document.getElementById('allow').addEventListener('click', function () { gatehelp.hidden = true; locate(); });
   }
 
+  /* ---- lecturer override: the lecturer types the master key; the server then skips every entry check */
+  var master = document.getElementById('master'), ovrBox = document.getElementById('ovr'), ovrLinkP = document.getElementById('ovrlinkp');
+  function setOvr(on) {
+    ovrOn = on; ovrBox.hidden = !on; ovrLinkP.hidden = on;
+    form.noValidate = on;                       // the browser's own digit / required checks must not block an override
+    if (on) document.getElementById('idx').removeAttribute('maxlength');
+    if (on) { gate.hidden = true; go.disabled = false; setTimeout(function () { master.focus(); }, 50); }
+    else { master.value = ''; }
+  }
+  function hideRoomFields() {                   // an override needs only name, index number and the key
+    var c = document.getElementById('code'); c.required = false; c.style.display = 'none';
+    c.previousElementSibling.style.display = 'none'; c.nextElementSibling.style.display = 'none';
+    loc.style.display = 'none';
+    var tt = document.querySelector('#f ul'); if (tt) tt.style.display = 'none';
+  }
+  document.getElementById('ovrlink').addEventListener('click', function (e) { e.preventDefault(); setOvr(true); });
+  document.getElementById('gateovr').addEventListener('click', function (e) { e.preventDefault(); setOvr(true); });
+  document.getElementById('ovrstart').addEventListener('click', function (e) {   // no QR code at all
+    e.preventDefault(); nocode.hidden = true; form.hidden = false; hideRoomFields(); setOvr(true);
+  });
+  function showResult(j) {
+    if (j && j.ok) {
+      msg.className = 'ok';
+      if (j.done) { msg.textContent = 'Your attendance for today is recorded. Thank you.'; }
+      else { msg.textContent = 'Opening your quiz. Sign in with your KNUST account if asked.'; setTimeout(function () { location.replace(j.url); }, 600); }
+    } else {
+      msg.className = 'err'; msg.textContent = (j && j.msg) || 'Something went wrong.'; go.disabled = false;
+    }
+  }
+  function overrideSubmit() {
+    var m = master.value.trim(), nm = document.getElementById('name').value.trim(), ix = document.getElementById('idx').value.trim();
+    msg.className = 'err';
+    if (nm.length < 2) { msg.textContent = 'Enter the student\'s name.'; return; }
+    if (!ix) { msg.textContent = 'Enter the index number.'; return; }
+    if (!m) { msg.textContent = 'Enter the lecturer key.'; return; }
+    go.disabled = true; msg.className = ''; msg.textContent = 'Checking...';
+    fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'enter', master: m, name: nm, idx: ix, dev: dev() }) })
+      .then(function (r) { return r.json(); }).then(showResult)
+      .catch(function () { msg.className = 'err'; msg.textContent = 'Network problem. Try again.'; go.disabled = false; });
+  }
+
   form.addEventListener('submit', function (ev) {
     ev.preventDefault();
+    if (ovrOn) { overrideSubmit(); return; }
     go.disabled = true; msg.className = ''; msg.textContent = 'Checking...';
     (geoOff && !pos ? Promise.resolve({ coords: null }) : getPos(10000).catch(function () { return { coords: pos }; })).then(function (p) {
       var c = (p && p.coords) || pos;
