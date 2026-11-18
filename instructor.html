@@ -45,7 +45,7 @@
       <button id="start">Start session</button>
       <button id="log" class="alt">Download log (CSV)</button>
     </div>
-    <p class="meta">The venue is fixed at 6.6730470, -1.5643920 (6&deg;40'23.0"N 1&deg;33'51.8"W). Set the radius, press Start, then project this page. Students must be within the radius, plus a small allowance for GPS error.</p>
+    <p class="meta">The venue is fixed at 6.6733090, -1.5643750 (6&deg;40'23.9"N 1&deg;33'51.8"W). Set the radius, press Start, then project this page. Students must be within the radius, plus a small allowance for GPS error.</p>
     <div id="note"></div>
   </div>
 
@@ -96,7 +96,7 @@
       }
       document.getElementById('code').textContent = j.code;
       document.getElementById('left').textContent = 'New code in ' + j.codeLeft + ' s';
-      document.getElementById('entered').textContent = j.entered;
+      document.getElementById('entered').textContent = j.entered + (j.overrides ? ' (' + j.overrides + ' by master key)' : '');
       document.getElementById('info').textContent = 'Allowed radius ' + j.radius + ' m around the fixed venue. Session closes in ' + j.minutesLeft + ' min.';
       geoOn = j.geofence !== false;
       var g = document.getElementById('geo');
@@ -142,8 +142,8 @@
     post({ action: 'log' }).then(function (j) {
       if (!j.ok) { say(j.msg || 'Error', true); return; }
       var esc = function (s) { return '"' + String(s).replace(/"/g, '""') + '"'; };
-      var lines = ['time,name,index,set,distance_m,accuracy_m'];
-      j.rows.forEach(function (r) { lines.push([new Date(r.ts).toISOString(), esc(r.name), r.idx, r.set, r.dist, r.acc].join(',')); });
+      var lines = ['time,name,index,set,distance_m,accuracy_m,attempts,master_key_uses,session'];
+      j.rows.forEach(function (r) { lines.push([new Date(r.ts).toISOString(), esc(r.name), esc(r.idx), r.set, r.dist, r.acc, r.n || 1, r.ovr || 0, r.sid].join(',')); });
       var a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
       a.download = 'ce353_quiz_log.csv'; a.click();
