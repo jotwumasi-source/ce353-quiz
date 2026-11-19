@@ -42,6 +42,11 @@
   table.d td { border:1px solid var(--line); padding:6px 10px; } table.d td:first-child { background:#f0f5f0; font-weight:600; width:55%; }
   ol.q { padding-left:20px; font-size:15px; line-height:1.55; } ol.q li { margin:6px 0; }
   svg { display:block; margin:6px auto; max-width:100%; height:auto; }
+  .arow { display:flex; align-items:center; gap:8px; margin:10px 0; }
+  .arow label { margin:0; flex:0 0 78px; font-size:15px; }
+  .arow input { flex:1; min-width:0; }
+  .arow .u { flex:0 0 46px; color:var(--muted); font-size:14px; }
+  #amsg { margin-top:10px; font-size:15px; min-height:18px; } #amsg.ok { color:var(--ok); } #amsg.err { color:var(--err); }
   @media print { body { display:none !important; } }
 </style>
 </head>
@@ -82,11 +87,13 @@
       <div id="pbody"></div>
     </div>
     <div class="card" id="ansbox">
-      <strong>Answer form</strong>
-      <p class="hint">Type your answers in the answer form. It asks for your index number and the access code on your card, then Q1 to Q5. Your numbers on this page are yours alone.</p>
-      <a class="btn" id="formlink" href="#" target="_blank" rel="noopener noreferrer">Open the answer form</a>
+      <strong>Your answers</strong>
+      <p class="hint">Type each answer as a number. They are saved automatically as you type, and sent for marking when you submit or when the time runs out.</p>
+      <div id="alist"></div>
+      <button id="submit" type="button">Submit my answers</button>
+      <div id="amsg" role="status" aria-live="polite"></div>
     </div>
-    <div class="card" id="over" hidden><strong>Time is up.</strong><p class="hint">Your problem is no longer shown. Answers submitted after the deadline are flagged.</p></div>
+    <div class="card" id="over" hidden><strong id="overhead">Time is up.</strong><p class="hint" id="overtext"></p></div>
   </div>
 </main>
 <script>
@@ -169,19 +176,69 @@
     $('hello').textContent = 'Hello, ' + j.name;
     $('sub').textContent = 'Index ' + j.idx + (j.kind === 'resume' ? ' (resumed)' : '') + '  |  ' + (j.title || 'Quiz');
     var wm = (j.name + '  ' + j.idx + '    '); $('wm').textContent = new Array(120).join(wm);
-    if (j.formUrl) { $('formlink').href = j.formUrl; } else { $('ansbox').hidden = true; }
+    submitted = !!j.submitted; finalSent = submitted;
     if (j.expired) { expire(); return; }
     renderProblem(j.params);
+    buildAnswers(j);
+    if (submitted) markSubmitted();
     clearInterval(quizTimer); quizTimer = setInterval(tick, 500); tick();
     watch();
   }
   function tick() {
     var left = Math.max(0, Math.round((deadline - (Date.now() + offset)) / 1000));
-    $('clock').textContent = pad(Math.floor(left / 60)) + ':' + pad(left % 60);
-    $('clock').className = left <= 60 ? 'low' : '';
-    if (left <= 0) { clearInterval(quizTimer); expire(); }
+    if (!submitted) { $('clock').textContent = pad(Math.floor(left / 60)) + ':' + pad(left % 60); $('clock').className = left <= 60 ? 'low' : ''; }
+    if (left <= 0) { clearInterval(quizTimer); if (!submitted) finalSubmit(true); expire(); }
   }
-  function expire() { $('pbody').innerHTML = ''; $('wm').textContent = ''; $('problem').hidden = true; $('over').hidden = false; $('clock').textContent = '00:00'; }
+  function expire() {
+    $('pbody').innerHTML = ''; $('wm').textContent = ''; $('problem').hidden = true; $('ansbox').hidden = true; $('over').hidden = false; $('clock').textContent = '00:00';
+    $('overhead').textContent = submitted ? 'Submitted. Time is up.' : 'Time is up.';
+    $('overtext').textContent = submitted ? 'Your answers were submitted and are recorded. You can close this page.' : 'Your last saved answers are being sent for marking.';
+  }
+
+  // ---- answers: typed on this page, saved as you go, marked on the server
+  var N = 5, submitted = false, finalSent = false, dirty = false, saveT = null, armT = null;
+  var LABELS = {
+    T: [['Q1 Mf', 'kNm'], ['Q2 Mov', 'kNm'], ['Q3 s', 'mm'], ['Q4 x', 'mm'], ['Q5 As', 'mm²']],
+    L: [['Q1 bf', 'mm'], ['Q2 Mf', 'kNm'], ['Q3 z', 'mm'], ['Q4 x', 'mm'], ['Q5 As', 'mm²']]
+  };
+  function vals() { var a = []; for (var i = 0; i < N; i++) { var el = $('a' + i); a.push(el ? el.value : ''); } return a; }
+  function amsg(t, cls) { $('amsg').textContent = t; $('amsg').className = cls || ''; }
+  function buildAnswers(j) {
+    var lab = LABELS[(j.params && j.params.tp) || 'T']; N = lab.length;
+    $('alist').innerHTML = lab.map(function (l, i) {
+      return '<div class="arow"><label for="a' + i + '">' + l[0] + '</label><input id="a' + i + '" inputmode="decimal" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="24"><span class="u">' + l[1] + '</span></div>';
+    }).join('');
+    (j.answers || []).forEach(function (v, i) { var el = $('a' + i); if (el) el.value = v; });
+    for (var i = 0; i < N; i++) $('a' + i).addEventListener('input', function () { dirty = true; clearTimeout(saveT); saveT = setTimeout(save, 4000); });
+    $('submit').disabled = false; $('submit').textContent = 'Submit my answers'; $('submit').hidden = false;
+  }
+  function save() {
+    if (!dirty || submitted) return; dirty = false;
+    post({ action: 'csubmit', token: token, dev: dev(), answers: vals(), final: false }).then(function (j) { if (j && j.saved) amsg('Saved.', 'ok'); else dirty = true; }).catch(function () { dirty = true; });
+  }
+  setInterval(save, 15000);
+  function markSubmitted() {
+    submitted = true; clearTimeout(armT); clearTimeout(saveT);
+    for (var i = 0; i < N; i++) { var el = $('a' + i); if (el) el.disabled = true; }
+    $('submit').hidden = true; $('clock').textContent = 'Done'; $('clock').className = '';
+    amsg('Submitted. Your answers are recorded. You can close this page.', 'ok');
+  }
+  function finalSubmit(auto) {
+    if (submitted || finalSent) return; finalSent = true; $('submit').disabled = true;
+    amsg(auto ? 'Time is up: sending your answers...' : 'Submitting...', '');
+    post({ action: 'csubmit', token: token, dev: dev(), answers: vals(), final: true }).then(function (j) {
+      if (j && j.submitted) { markSubmitted(); if (auto) expire(); }
+      else { finalSent = false; $('submit').disabled = false; amsg((j && j.msg) || 'Could not submit. Try again.', 'err'); }
+    }).catch(function () { finalSent = false; $('submit').disabled = false; amsg('Network problem. Press Submit again.', 'err'); });
+  }
+  $('submit').addEventListener('click', function () {
+    if (submitted) return;
+    if (!armT) {                                  // two taps: the first arms the button so a slip cannot submit early
+      $('submit').textContent = 'Tap again to confirm. You cannot change answers after this.';
+      armT = setTimeout(function () { armT = null; $('submit').textContent = 'Submit my answers'; }, 5000); return;
+    }
+    clearTimeout(armT); armT = null; finalSubmit(false);
+  });
 
   function diagram(P) {
     var bf = P.bf, bw = P.bw, hf = P.hf, d = P.d, h = d + 50;
@@ -208,7 +265,46 @@
     o += '<text x="' + (wl - 10) + '" y="' + (bot + 14) + '" text-anchor="end" font-size="14">A<tspan font-size="10" dy="3">s</tspan></text>';
     return o + '</svg>';
   }
-  function renderProblem(P) {
+  function diagramL(P) {         // L-section: a rib with the slab on ONE side; the slab is drawn broken off (the effective width is for the student to find)
+    var bw = P.bw, hf = P.hf, d = P.d, h = d + 50, fw = Math.max(bw, 120);
+    var s = Math.min(210 / (bw + fw), 250 / h), Y0 = 46, fl = 110;
+    var wl = fl + fw * s, wr = wl + bw * s, xc = (wl + wr) / 2;
+    var top = Y0, fb = Y0 + hf * s, bot = Y0 + h * s, yb = Y0 + (h - 50) * s;
+    var W = Math.round(wr + 120), H = Math.round(h * s) + 100;
+    var rb = Math.max(4, bw * s * 0.065), bx = bw * s * 0.275, o = '';
+    function arrow(x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#000" stroke-width="1" marker-start="url(#a)" marker-end="url(#a)"/>'; }
+    function ext(x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#888" stroke-width=".8"/>'; }
+    o += '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" role="img" aria-label="L-beam section">';
+    o += '<defs><marker id="a" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker></defs>';
+    o += '<polygon points="' + [fl, top, wr, top, wr, bot, wl, bot, wl, fb, fl, fb].join(' ') + '" fill="#e4e4e4" stroke="#000" stroke-width="1.6"/>';
+    o += '<line x1="' + fl + '" y1="' + (top - 4) + '" x2="' + fl + '" y2="' + (fb + 4) + '" stroke="#000" stroke-width="1" stroke-dasharray="4 3"/>';
+    o += '<text x="' + (fl + 4) + '" y="' + (fb + 16) + '" font-size="11" fill="#444">slab continues</text>';
+    [-bx, 0, bx].forEach(function (dx) { o += '<circle cx="' + (xc + dx) + '" cy="' + yb + '" r="' + rb + '" fill="#000"/>'; });
+    o += ext(fl, top, fl - 44, top) + ext(fl, fb, fl - 44, fb) + arrow(fl - 34, top, fl - 34, fb);
+    o += '<text x="' + (fl - 40) + '" y="' + ((top + fb) / 2 + 5) + '" text-anchor="end" font-size="14">h<tspan font-size="10" dy="3">f</tspan><tspan dy="-3"> = ' + hf + '</tspan></text>';
+    o += ext(wl, bot, wl, bot + 26) + ext(wr, bot, wr, bot + 26) + arrow(wl, bot + 18, wr, bot + 18);
+    o += '<text x="' + xc + '" y="' + (bot + 40) + '" text-anchor="middle" font-size="14">b<tspan font-size="10" dy="3">w</tspan><tspan dy="-3"> = ' + bw + '</tspan></text>';
+    o += ext(wr, top, wr + 46, top) + ext(xc + bx, yb, wr + 46, yb) + arrow(wr + 36, top, wr + 36, yb);
+    o += '<text x="' + (wr + 40) + '" y="' + ((top + yb) / 2 + 5) + '" font-size="14">d = ' + d + '</text>';
+    o += '<line x1="' + (wl - 6) + '" y1="' + (bot + 4) + '" x2="' + (xc - bx + 4) + '" y2="' + (yb + 4) + '" stroke="#000" stroke-width="1"/>';
+    o += '<text x="' + (wl - 10) + '" y="' + (bot + 14) + '" text-anchor="end" font-size="14">A<tspan font-size="10" dy="3">s</tspan></text>';
+    return o + '</svg>';
+  }
+  function renderL(P) {
+    var rows = [['Design sagging moment, M', P.M + ' kNm'], ['Simply supported span, l', (P.l / 1000) + ' m (' + P.l + ' mm)'], ['Web width, bw', P.bw + ' mm'], ['Slab (flange) thickness, hf', P.hf + ' mm'],
+                ['Effective depth, d', P.d + ' mm'], ['Concrete strength, fcu', P.fcu + ' N/mm²'], ['Steel strength, fy', '500 N/mm²']];
+    var h = '<p><strong>Your edge beam.</strong> An L-shaped section (a rib with the slab on one side only) carries a sagging moment over a simply supported span. The slab reaches well beyond the effective flange width. The numbers are yours alone.</p>' + diagramL(P);
+    h += '<table class="d">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table>';
+    h += '<p>Use BS 8110 for an L-beam: effective flange width bf = bw + l/10. The neutral axis lies in the flange, so design as a rectangle bf × d with K = M/(fcu bf d²), z = d[0.5 + √(0.25 − K/0.9)] (not more than 0.95 d), x = (d − z)/0.45 and As = M/(0.87 fy z). Give each answer as a number, to at least 1 decimal place for Q1 to Q4 and the nearest whole number for Q5.</p>';
+    h += '<ol class="q"><li><strong>Q1.</strong> The effective flange width, bf, in mm.</li>' +
+         '<li><strong>Q2.</strong> The test moment Mf = 0.45 fcu bf hf (d − hf/2), in kNm.</li>' +
+         '<li><strong>Q3.</strong> The lever arm, z, in mm.</li>' +
+         '<li><strong>Q4.</strong> The neutral axis depth, x, in mm.</li>' +
+         '<li><strong>Q5.</strong> The tension steel area required, As, in mm².</li></ol>';
+    $('pbody').innerHTML = h;
+  }
+  function renderProblem(P) { if (P && P.tp === 'L') renderL(P); else renderT(P); }
+  function renderT(P) {
     var rows = [['Design sagging moment, M', P.M + ' kNm'], ['Flange width, bf', P.bf + ' mm'], ['Web width, bw', P.bw + ' mm'], ['Flange thickness, hf', P.hf + ' mm'],
                 ['Effective depth, d', P.d + ' mm'], ['Concrete strength, fcu', P.fcu + ' N/mm²'], ['Steel strength, fy', '500 N/mm²']];
     var h = '<p><strong>Your T-beam.</strong> The section below carries a sagging moment. The numbers are yours alone.</p>' + diagram(P);
