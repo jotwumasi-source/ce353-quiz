@@ -55,7 +55,7 @@
       <div><label for="mins">Minutes</label><input id="mins" type="number" value="20" min="1" max="240" style="width:90px"></div>
     </div>
     <div class="row" style="margin-top:10px">
-      <div><label for="form">Microsoft Form link (the answer form)</label><input id="form" class="wide" placeholder="https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=..."></div>
+      <div><label for="tpl">Question set (students type answers on their own page; no Form needed)</label><select id="tpl"><option value="L">L-beam, neutral axis in the flange</option><option value="T">T-beam, neutral axis in the web</option></select></div>
     </div>
     <div class="row" style="margin-top:10px">
       <button id="newq">Start a NEW quiz</button>
@@ -86,7 +86,7 @@
       <button id="export" class="alt">Export results (JSON, for marking)</button>
       <button id="sheet" class="alt">Update the Google Sheet</button>
     </div>
-    <div id="tablewrap"><table><thead><tr><th>Card</th><th>Status</th><th>Index</th><th>Name</th><th>Time left</th><th>Away</th><th>Notes</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div id="tablewrap"><table><thead><tr><th>Card</th><th>Status</th><th>Index</th><th>Name</th><th>Time left</th><th>Away</th><th>Score</th><th>Notes</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
   </div>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -106,15 +106,15 @@
     b.className = q.open ? 'open' : 'closed';
     b.textContent = q.open ? 'ENTRY OPEN: students can start with their cards' : 'ENTRY CLOSED: cards will not open until you press "Open entry"';
   }
-  function show(q) { banner(q); $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | form ' + (q.formUrl ? 'set' : 'NOT set')) : 'No quiz yet. Press "Start a NEW quiz".'; }
-  function fields() { return { title: $('title').value, minutes: +$('mins').value, formUrl: $('form').value.trim() }; }
+  function show(q) { banner(q); $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | ' + (q.tp === 'L' ? 'L-beam' : 'T-beam')) : 'No quiz yet. Press "Start a NEW quiz".'; }
+  function fields() { return { title: $('title').value, minutes: +$('mins').value, template: $('tpl').value }; }
   function remember() { try { sessionStorage.setItem('adm', key.value); } catch (e) {} }
 
   function refresh() {
     post({ action: 'clist' }).then(function (j) {
       if (!j.ok) { say(j.msg || 'Error', true); return; }
       remember(); say('Loaded.'); show(j.quiz); skew = j.now - Date.now();
-      if (j.quiz.qid && !$('title').value) { $('title').value = j.quiz.title || ''; $('mins').value = j.quiz.minutes; $('form').value = j.quiz.formUrl || ''; }
+      if (j.quiz.qid && !$('title').value) { $('title').value = j.quiz.title || ''; $('mins').value = j.quiz.minutes; $('tpl').value = j.quiz.tp || 'T'; }
       var order = ['new', 'opened', 'in_quiz', 'finished', 'locked', 'void'];
       $('counts').innerHTML = order.filter(function (s) { return j.counts[s]; }).map(function (s) { return '<span><span class="pill ' + s + '">' + s.replace('_', ' ') + '</span> ' + j.counts[s] + '</span>'; }).join('') || '<span class="meta">No cards yet.</span>';
       var rank = { locked: 0, opened: 1, in_quiz: 2, finished: 3, new: 4, void: 5 };
@@ -124,7 +124,7 @@
         var mm = left === '' ? '' : Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
         var away = c.hid ? c.hid + 'x, ' + c.away + ' s' : '';
         var note = [c.lk, c.ov ? 'master key x' + c.ov : ''].filter(Boolean).join('; ');
-        return '<tr><td>' + short(c.t) + '</td><td><span class="pill ' + c.st + '">' + c.st.replace('_', ' ') + '</span></td><td>' + c.idx + '</td><td>' + c.nm + '</td><td>' + mm + '</td><td>' + away + '</td><td>' + note + '</td><td>' +
+        return '<tr><td>' + short(c.t) + '</td><td><span class="pill ' + c.st + '">' + c.st.replace('_', ' ') + '</span></td><td>' + c.idx + '</td><td>' + c.nm + '</td><td>' + mm + '</td><td>' + away + '</td><td>' + (c.sc === '' || c.sc === undefined ? '' : c.sc + '/' + c.of + (c.sub ? ' submitted' : ' (draft)')) + '</td><td>' + note + '</td><td>' +
           (c.st !== 'void' ? '<button class="sm alt" data-a="unlock" data-id="' + c.t + '">Unlock</button> <button class="sm danger" data-a="void" data-id="' + c.t + '">Cancel</button>' : '') + '</td></tr>';
       }).join('');
     }).catch(function () { say('Network problem.', true); });
