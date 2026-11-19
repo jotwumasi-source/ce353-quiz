@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>CE 353 Quiz: Lecturer</title>
+<style>
+  :root { --green:#1b5e20; --ink:#1e2a22; --muted:#5b665e; --line:#cfd8d1; --bg:#f4f7f4; --err:#b3261e; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--green); color:#fff; padding:12px 18px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  main { max-width:1100px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .card h2 { margin:0 0 10px; font-size:16px; }
+  .row { display:flex; gap:12px; flex-wrap:wrap; align-items:end; }
+  label { font-size:13px; font-weight:600; display:block; margin-bottom:4px; }
+  input { font-size:15px; padding:9px; border:1px solid var(--line); border-radius:8px; width:200px; }
+  input.wide { width:420px; max-width:100%; }
+  button { font-size:15px; font-weight:600; padding:10px 16px; border:0; border-radius:8px; background:var(--green); color:#fff; cursor:pointer; }
+  button.alt { background:#fff; color:var(--green); border:1px solid var(--green); }
+  button.danger { background:var(--err); }
+  button.sm { padding:4px 10px; font-size:13px; }
+  .meta { color:var(--muted); font-size:13px; margin:8px 0 0; }
+  #note { margin-top:10px; font-size:14px; } .warn { color:var(--err); }
+  table { border-collapse:collapse; width:100%; font-size:13px; margin-top:10px; }
+  th, td { border-bottom:1px solid var(--line); padding:6px 8px; text-align:left; }
+  th { background:#f0f5f0; position:sticky; top:0; }
+  .pill { display:inline-block; padding:1px 8px; border-radius:10px; font-size:12px; font-weight:600; background:#e6f2e7; color:var(--green); }
+  .pill.locked, .pill.void { background:#fbeceb; color:var(--err); }
+  .pill.opened { background:#fff4e5; color:#7a4b00; } .pill.new { background:#eee; color:#555; }
+  .counts span { margin-right:14px; font-size:14px; }
+  #tablewrap { max-height:480px; overflow:auto; }
+</style>
+</head>
+<body>
+<header><h1>CE 353 Quiz: Lecturer console (cards)</h1></header>
+<main>
+  <div class="card">
+    <div class="row">
+      <div><label for="key">Admin key</label><input id="key" type="password" autocomplete="off"></div>
+      <button id="load" class="alt">Load</button>
+    </div>
+    <div id="note" class="meta"></div>
+  </div>
+
+  <div class="card">
+    <h2>1. Quiz</h2>
+    <div class="row">
+      <div><label for="title">Title</label><input id="title" placeholder="CE 353 Quiz 4"></div>
+      <div><label for="mins">Minutes</label><input id="mins" type="number" value="20" min="1" max="240" style="width:90px"></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <div><label for="form">Microsoft Form link (the answer form)</label><input id="form" class="wide" placeholder="https://forms.cloud.microsoft/Pages/ResponsePage.aspx?id=..."></div>
+    </div>
+    <div class="row" style="margin-top:10px">
+      <button id="newq">Start a NEW quiz</button>
+      <button id="saveq" class="alt">Save changes</button>
+      <button id="openq" class="alt">Open entry</button>
+      <button id="closeq" class="alt">Close entry</button>
+    </div>
+    <p class="meta" id="qinfo"></p>
+    <p class="meta">"Start a NEW quiz" makes the old cards stop working. Entry must be open for new cards to be used; students already inside can continue.</p>
+  </div>
+
+  <div class="card">
+    <h2>2. Cards</h2>
+    <div class="row">
+      <div><label for="count">How many cards</label><input id="count" type="number" value="8" min="1" max="400" style="width:90px"></div>
+      <button id="gen">Generate cards</button>
+      <button id="print" class="alt" disabled>Print the new cards</button>
+      <button id="csv" class="alt" disabled>Download new cards (CSV)</button>
+    </div>
+    <p class="meta">Every card gets its own random parameters, a 12-character card ID and an 8-digit one-time access code. The codes are shown only once, right after generating: print or download them now.</p>
+  </div>
+
+  <div class="card">
+    <h2>3. Live</h2>
+    <div class="counts" id="counts"></div>
+    <div class="row" style="margin-top:10px">
+      <button id="refresh" class="alt">Refresh</button>
+      <button id="export" class="alt">Export results (JSON, for marking)</button>
+      <button id="sheet" class="alt">Update the Google Sheet</button>
+    </div>
+    <div id="tablewrap"><table><thead><tr><th>Card</th><th>Status</th><th>Index</th><th>Name</th><th>Time left</th><th>Away</th><th>Notes</th><th></th></tr></thead><tbody id="rows"></tbody></table></div>
+  </div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbz5eDIWKgR1cKuTKzKCu_HIky4g_hIT6c_civEEX-jo-yvkA9Ho2xFjTNP9-WIIoesV/exec';
+  var $ = function (id) { return document.getElementById(id); };
+  var key = $('key'), newCards = [], timer = null, skew = 0;
+  try { key.value = sessionStorage.getItem('adm') || ''; } catch (e) {}
+  function post(b) { b.key = key.value; return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(b) }).then(function (r) { return r.json(); }); }
+  function say(t, bad) { $('note').textContent = t; $('note').className = 'meta' + (bad ? ' warn' : ''); }
+  function short(t) { return t.slice(0, 4) + '-' + t.slice(4, 8) + '-' + t.slice(8, 12); }
+  function link(id) { return new URL('q.html', location.href).href + '?c=' + id; }
+  function show(q) { $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | form ' + (q.formUrl ? 'set' : 'NOT set')) : 'No quiz yet. Press "Start a NEW quiz".'; }
+  function fields() { return { title: $('title').value, minutes: +$('mins').value, formUrl: $('form').value.trim() }; }
+  function remember() { try { sessionStorage.setItem('adm', key.value); } catch (e) {} }
+
+  function refresh() {
+    post({ action: 'clist' }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Error', true); return; }
+      remember(); say('Loaded.'); show(j.quiz); skew = j.now - Date.now();
+      if (j.quiz.qid && !$('title').value) { $('title').value = j.quiz.title || ''; $('mins').value = j.quiz.minutes; $('form').value = j.quiz.formUrl || ''; }
+      var order = ['new', 'opened', 'in_quiz', 'finished', 'locked', 'void'];
+      $('counts').innerHTML = order.filter(function (s) { return j.counts[s]; }).map(function (s) { return '<span><span class="pill ' + s + '">' + s.replace('_', ' ') + '</span> ' + j.counts[s] + '</span>'; }).join('') || '<span class="meta">No cards yet.</span>';
+      var rank = { locked: 0, opened: 1, in_quiz: 2, finished: 3, new: 4, void: 5 };
+      j.cards.sort(function (a, b) { return (rank[a.st] - rank[b.st]) || (a.idx > b.idx ? 1 : -1); });
+      $('rows').innerHTML = j.cards.map(function (c) {
+        var left = c.st === 'in_quiz' ? Math.max(0, Math.round((c.dl - (Date.now() + skew)) / 1000)) : '';
+        var mm = left === '' ? '' : Math.floor(left / 60) + ':' + ('0' + left % 60).slice(-2);
+        var away = c.hid ? c.hid + 'x, ' + c.away + ' s' : '';
+        var note = [c.lk, c.ov ? 'master key x' + c.ov : ''].filter(Boolean).join('; ');
+        return '<tr><td>' + short(c.t) + '</td><td><span class="pill ' + c.st + '">' + c.st.replace('_', ' ') + '</span></td><td>' + c.idx + '</td><td>' + c.nm + '</td><td>' + mm + '</td><td>' + away + '</td><td>' + note + '</td><td>' +
+          (c.st !== 'void' ? '<button class="sm alt" data-a="unlock" data-id="' + c.t + '">Unlock</button> <button class="sm danger" data-a="void" data-id="' + c.t + '">Cancel</button>' : '') + '</td></tr>';
+      }).join('');
+    }).catch(function () { say('Network problem.', true); });
+  }
+  function auto() { if (!timer) timer = setInterval(refresh, 6000); }
+
+  $('load').addEventListener('click', function () { refresh(); auto(); });
+  $('refresh').addEventListener('click', refresh);
+  $('newq').addEventListener('click', function () {
+    if (!confirm('Start a NEW quiz? Cards from the current quiz stop working.')) return;
+    var f = fields(); f.fresh = true; f.open = false;
+    post(Object.assign({ action: 'cquiz' }, f)).then(function (j) { if (!j.ok) { say(j.msg, true); return; } say('New quiz created. Generate cards next.'); newCards = []; show(j.quiz); refresh(); auto(); });
+  });
+  $('saveq').addEventListener('click', function () { post(Object.assign({ action: 'cquiz' }, fields())).then(function (j) { if (!j.ok) say(j.msg, true); else { say('Saved.'); show(j.quiz); } }); });
+  $('openq').addEventListener('click', function () { post({ action: 'cquiz', open: true }).then(function (j) { if (!j.ok) say(j.msg, true); else { say('Entry is OPEN.'); show(j.quiz); } }); });
+  $('closeq').addEventListener('click', function () { post({ action: 'cquiz', open: false }).then(function (j) { if (!j.ok) say(j.msg, true); else { say('Entry is CLOSED. Students already inside can continue.'); show(j.quiz); } }); });
+
+  $('gen').addEventListener('click', function () {
+    var n = +$('count').value;
+    if (!confirm('Generate ' + n + ' new cards?')) return;
+    $('gen').disabled = true;
+    post({ action: 'cgen', count: n }).then(function (j) {
+      $('gen').disabled = false;
+      if (!j.ok) { say(j.msg || 'Could not generate.', true); return; }
+      newCards = j.cards; $('print').disabled = false; $('csv').disabled = false;
+      say(n + ' cards generated. Print or download them NOW: the access codes are not shown again.'); refresh(); auto();
+    }).catch(function () { $('gen').disabled = false; say('Network problem.', true); });
+  });
+  $('csv').addEventListener('click', function () {
+    var lines = ['card_id,access_code,link'];
+    newCards.forEach(function (c) { lines.push([short(c.id), c.code.slice(0, 4) + '-' + c.code.slice(4), link(c.id)].join(',')); });
+    var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })); a.download = 'ce353_cards.csv'; a.click();
+  });
+  $('print').addEventListener('click', function () {
+    var base = new URL('q.html', location.href).href.replace(/^https?:\/\//, '');
+    var w = window.open('', '_blank'); if (!w) { say('Allow pop-ups to print.', true); return; }
+    var cards = newCards.map(function (c, i) {
+      return '<div class="c"><div class="t">CE 353 Quiz</div><div class="qr" id="qr' + i + '"></div><div class="l"><b>Scan the QR code,</b> or type this address:<br><span class="u">' + base + '</span>' +
+        '<br>Card ID: <span class="m">' + short(c.id) + '</span><br>Access code: <span class="m">' + c.code.slice(0, 4) + '-' + c.code.slice(4) + '</span></div>' +
+        '<div class="n">One use only. Do not share this card.</div></div>';
+    }).join('');
+    var data = JSON.stringify(newCards.map(function (c) { return link(c.id); }));
+    w.document.write('<!doctype html><meta charset="utf-8"><title>CE 353 cards</title><style>@page{size:A4;margin:8mm}body{margin:0;font-family:Arial,sans-serif}' +
+      '.sheet{display:grid;grid-template-columns:1fr 1fr;gap:0}.c{border:1px dashed #666;padding:5mm;height:54mm;box-sizing:border-box;position:relative;break-inside:avoid;display:grid;grid-template-columns:34mm 1fr;grid-template-rows:auto 1fr auto;column-gap:4mm}' +
+      '.t{grid-column:1/3;font-weight:700;font-size:12pt}.qr{width:32mm;height:32mm;margin-top:2mm}.l{font-size:9pt;line-height:1.45;margin-top:2mm}.u{font-weight:700}.m{font-family:monospace;font-size:11pt;font-weight:700}' +
+      '.n{grid-column:1/3;font-size:8pt;color:#555;align-self:end}</style><div class="sheet">' + cards + '</div>' +
+      '<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>' +
+      '<script>var L=' + data + ';window.onload=function(){L.forEach(function(u,i){new QRCode(document.getElementById("qr"+i),{text:u,width:121,height:121,correctLevel:QRCode.CorrectLevel.M})});setTimeout(function(){window.print()},600)}<\/script>');
+    w.document.close();
+  });
+
+  $('rows').addEventListener('click', function (e) {
+    var b = e.target.closest('button'); if (!b) return;
+    var id = b.getAttribute('data-id'), a = b.getAttribute('data-a');
+    if (a === 'void' && !confirm('Cancel card ' + short(id) + '? It can never be used again.')) return;
+    post({ action: a === 'void' ? 'cvoid' : 'cunlock', id: id }).then(function (j) { say(j.ok ? 'Done.' : (j.msg || 'Error'), !j.ok); refresh(); });
+  });
+  $('export').addEventListener('click', function () {
+    post({ action: 'cexport' }).then(function (j) {
+      if (!j.ok) { say(j.msg || 'Error', true); return; }
+      var a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([JSON.stringify(j, null, 1)], { type: 'application/json' })); a.download = 'ce353_quiz_export.json'; a.click();
+      say('Exported ' + j.cards.length + ' cards.');
+    });
+  });
+  $('sheet').addEventListener('click', function () { post({ action: 'csync' }).then(function (j) { say(j.ok ? 'Google Sheet updated (' + j.cards + ' cards, ' + j.students + ' students).' : (j.msg || 'Error'), !j.ok); }); });
+
+  if (key.value) { refresh(); auto(); }
+})();
+</script>
+</body>
+</html>
