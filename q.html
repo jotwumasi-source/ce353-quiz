@@ -177,8 +177,8 @@
 
   function diagram(P) {
     var bf = P.bf, bw = P.bw, hf = P.hf, d = P.d, h = d + 50;
-    var s = Math.min(230 / bf, 250 / h), X0 = 190, Y0 = 46;       // section centre-line x, top y
-    var W = 380, H = Math.round(h * s) + 100;
+    var s = Math.min(190 / bf, 250 / h), X0 = 215, Y0 = 46;       // section centre-line x, top y
+    var W = 430, H = Math.round(h * s) + 100;
     var l = X0 - bf * s / 2, r = X0 + bf * s / 2, wl = X0 - bw * s / 2, wr = X0 + bw * s / 2;
     var top = Y0, fb = Y0 + hf * s, bot = Y0 + h * s, yb = Y0 + (h - 50) * s;      // bars at 50 mm above the soffit
     function arrow(x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#000" stroke-width="1" marker-start="url(#a)" marker-end="url(#a)"/>'; }
