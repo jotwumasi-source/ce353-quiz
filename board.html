@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CE 353 Live Scoreboard</title>
+<style>
+  :root { --bg1:#0f1b3d; --bg2:#27145a; --ink:#fff; --mut:#b9c3e6; --card:rgba(255,255,255,.08); }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--ink);
+         background:linear-gradient(160deg,var(--bg1),var(--bg2)); overflow-x:hidden; }
+  main { max-width:1100px; margin:0 auto; padding:18px 16px 40px; }
+  h1 { margin:6px 0 2px; font-size:clamp(24px,4.4vw,44px); text-align:center; letter-spacing:.5px; }
+  #sub { text-align:center; color:var(--mut); font-size:clamp(14px,2vw,20px); margin-bottom:16px; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-bottom:18px; }
+  .stat { background:var(--card); border-radius:16px; padding:12px 8px; text-align:center; }
+  .stat b { display:block; font-size:clamp(28px,6vw,56px); line-height:1.1; }
+  .stat span { color:var(--mut); font-size:clamp(12px,1.8vw,18px); }
+  #prog { height:16px; background:var(--card); border-radius:99px; overflow:hidden; margin:0 0 22px; }
+  #progbar { height:100%; width:0; background:linear-gradient(90deg,#34d399,#fde047); border-radius:99px; transition:width 1s ease; }
+  #chart { display:grid; grid-template-columns:repeat(6,1fr); gap:clamp(6px,2vw,22px); align-items:end; height:clamp(220px,42vh,380px);
+           background:var(--card); border-radius:20px; padding:14px clamp(8px,2vw,24px) 0; position:relative; }
+  .col { display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; }
+  .cnt { font-size:clamp(20px,4vw,40px); font-weight:800; margin-bottom:4px; }
+  .bar { width:100%; max-width:120px; min-height:6px; border-radius:14px 14px 0 0; transition:height 1s cubic-bezier(.2,1.4,.4,1); }
+  .lab { text-align:center; margin-top:8px; font-size:clamp(16px,3vw,30px); font-weight:700; }
+  .lab small { display:block; font-size:clamp(11px,1.6vw,16px); color:var(--mut); font-weight:400; }
+  .labs { display:grid; grid-template-columns:repeat(6,1fr); gap:clamp(6px,2vw,22px); padding:0 clamp(8px,2vw,24px); }
+  #mood { text-align:center; font-size:clamp(18px,3vw,30px); margin-top:22px; min-height:40px; }
+  #foot { text-align:center; color:var(--mut); font-size:13px; margin-top:18px; }
+  .pop { animation:pop .6s ease; } @keyframes pop { 30% { transform:scale(1.35); } 100% { transform:scale(1); } }
+  .conf { position:fixed; top:-20px; font-size:28px; pointer-events:none; animation:fall linear forwards; z-index:9; }
+  @keyframes fall { to { transform:translateY(110vh) rotate(540deg); opacity:.9; } }
+  @media (max-width:560px) { .stats { grid-template-columns:repeat(2,1fr); } }
+</style>
+</head>
+<body>
+<main>
+  <h1>🏆 CE 353 Live Scoreboard</h1>
+  <div id="sub">Waiting for the quiz...</div>
+  <div class="stats">
+    <div class="stat"><b id="sDone">0</b><span>✅ Finished</span></div>
+    <div class="stat"><b id="sWork">0</b><span>✏️ Working now</span></div>
+    <div class="stat"><b id="sWait">0</b><span>⏳ Not started</span></div>
+    <div class="stat"><b id="sAvg">-</b><span>📊 Class average</span></div>
+  </div>
+  <div id="prog"><div id="progbar"></div></div>
+  <div id="chart"></div>
+  <div class="labs" id="labs"></div>
+  <div id="mood"></div>
+  <div id="foot">Scores appear here after each student submits. No names are shown.</div>
+</main>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbz5eDIWKgR1cKuTKzKCu_HIky4g_hIT6c_civEEX-jo-yvkA9Ho2xFjTNP9-WIIoesV/exec';
+  var $ = function (id) { return document.getElementById(id); };
+  var COLORS = ['#f87171', '#fb923c', '#fbbf24', '#a3e635', '#34d399', '#22d3ee'];
+  var FACES = ['😬', '🙂', '😀', '😎', '🤩', '🏆'];
+  var last = null, built = 0;
+  function post(b) { return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(b) }).then(function (r) { return r.json(); }); }
+  function build(n) {
+    if (built === n) return; built = n;
+    var c = '', l = '';
+    for (var i = 0; i <= n; i++) {
+      var col = COLORS[Math.min(COLORS.length - 1, Math.round(i / n * (COLORS.length - 1)))];
+      c += '<div class="col"><div class="cnt" id="c' + i + '">0</div><div class="bar" id="b' + i + '" style="height:6px;background:' + col + '"></div></div>';
+      l += '<div class="lab">' + i + '/' + n + '<small>' + FACES[Math.min(FACES.length - 1, Math.round(i / n * (FACES.length - 1)))] + '</small></div>';
+    }
+    $('chart').style.gridTemplateColumns = $('labs').style.gridTemplateColumns = 'repeat(' + (n + 1) + ',1fr)';
+    $('chart').innerHTML = c; $('labs').innerHTML = l;
+  }
+  function bump(el, v) { if (el.textContent !== String(v)) { el.textContent = v; el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop'); } }
+  function confetti() {
+    var e = ['🎉', '⭐', '🎊', '✨', '🏆'];
+    for (var i = 0; i < 28; i++) {
+      var s = document.createElement('div'); s.className = 'conf'; s.textContent = e[i % e.length];
+      s.style.left = Math.random() * 100 + 'vw'; s.style.animationDuration = (2.5 + Math.random() * 2.5) + 's'; s.style.fontSize = (20 + Math.random() * 26) + 'px';
+      document.body.appendChild(s); setTimeout(function (x) { x.remove(); }.bind(null, s), 5500);
+    }
+  }
+  function mood(j) {
+    if (!j.done) return j.working ? '🧠 Brains at work. Scores will light up as students submit.' : '';
+    var a = j.avg / j.n;
+    if (a >= .85) return '🔥 The class is on fire!';
+    if (a >= .6) return '👏 Strong work so far.';
+    if (a >= .35) return '💪 A tough one. Well done for finishing.';
+    return '🧩 This was a hard one. We will go through it together.';
+  }
+  function draw(j) {
+    build(j.n);
+    $('sub').textContent = (j.title || 'Quiz') + (j.open ? '  |  entry open' : '  |  entry closed');
+    bump($('sDone'), j.done); bump($('sWork'), j.working); bump($('sWait'), j.waiting);
+    $('sAvg').textContent = j.avg == null ? '-' : j.avg.toFixed(1) + '/' + j.n;
+    var total = j.done + j.working + j.waiting;
+    $('progbar').style.width = (total ? Math.round(j.done / total * 100) : 0) + '%';
+    var mx = Math.max.apply(null, j.dist.concat([1]));
+    for (var i = 0; i <= j.n; i++) { bump($('c' + i), j.dist[i]); $('b' + i).style.height = Math.max(6, Math.round(j.dist[i] / mx * 78)) + '%'; }
+    if (last && j.dist[j.n] > last.dist[j.n]) confetti();
+    $('mood').textContent = mood(j);
+    last = j;
+  }
+  function poll() { post({ action: 'cboard' }).then(function (j) { if (j && j.ok) draw(j); }).catch(function () {}); }
+  poll(); setInterval(poll, 8000);
+})();
+</script>
+</body>
+</html>
