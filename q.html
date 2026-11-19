@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>CE 353 Quiz</title>
+<style>
+  :root { --green:#1b5e20; --ink:#1e2a22; --muted:#5b665e; --line:#cfd8d1; --bg:#f4f7f4; --err:#b3261e; --ok:#1b5e20; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif; color:var(--ink); background:var(--bg); }
+  header { background:var(--green); color:#fff; padding:14px 16px; }
+  header h1 { margin:0; font-size:18px; font-weight:600; }
+  header p { margin:2px 0 0; font-size:13px; opacity:.9; }
+  main { max-width:520px; margin:0 auto; padding:16px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  label { display:block; font-weight:600; font-size:14px; margin:14px 0 6px; }
+  input { width:100%; font-size:17px; padding:12px; border:1px solid var(--line); border-radius:8px; background:#fff; color:var(--ink); }
+  input:focus { outline:2px solid var(--green); outline-offset:1px; }
+  button, a.btn { display:block; width:100%; margin-top:16px; font-size:17px; font-weight:600; padding:14px; border:0; border-radius:8px; background:var(--green); color:#fff; text-align:center; text-decoration:none; }
+  button:disabled { background:#9db3a0; }
+  .hint { font-size:13px; color:var(--muted); margin:6px 0 0; }
+  #msg { margin-top:14px; font-size:15px; min-height:20px; }
+  #msg.err { color:var(--err); } #msg.ok { color:var(--ok); }
+  #lockbar { margin:12px 0 0; padding:10px 12px; border-radius:8px; background:#fff4e5; color:#7a4b00; font-size:14px; }
+  a { color:var(--green); }
+  [hidden] { display:none !important; }
+  /* quiz view */
+  #hello { font-size:20px; font-weight:700; margin:0; }
+  #sub { color:var(--muted); font-size:14px; margin:2px 0 0; }
+  #timer { position:sticky; top:0; z-index:5; background:#fff; border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  #clock { font-size:28px; font-weight:700; font-variant-numeric:tabular-nums; color:var(--green); }
+  #clock.low { color:var(--err); }
+  #problem { user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; position:relative; overflow:hidden; }
+  #wm { position:absolute; inset:0; pointer-events:none; opacity:.09; font-size:15px; font-weight:700; line-height:2.4; transform:rotate(-24deg) scale(1.6); white-space:pre-wrap; word-break:break-all; color:#000; }
+  #problem > *:not(#wm) { position:relative; }
+  #problem p { font-size:15px; line-height:1.5; margin:8px 0; }
+  table.d { border-collapse:collapse; width:100%; font-size:15px; margin:8px 0; }
+  table.d td { border:1px solid var(--line); padding:6px 10px; } table.d td:first-child { background:#f0f5f0; font-weight:600; width:55%; }
+  ol.q { padding-left:20px; font-size:15px; line-height:1.55; } ol.q li { margin:6px 0; }
+  svg { display:block; margin:6px auto; max-width:100%; height:auto; }
+  @media print { body { display:none !important; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>CE 353 Reinforced Concrete Design: Quiz</h1>
+  <p>KNUST, Department of Civil Engineering</p>
+</header>
+<main>
+  <!-- ENTRY: card id (only when typed by hand), access code, index number, name (first time only) -->
+  <div class="card" id="entry">
+    <strong id="entryhead">Enter the details on your card</strong>
+    <div id="lockbar" hidden></div>
+    <form id="f" autocomplete="off" novalidate>
+      <div id="gid"><label for="cid">Card ID (printed on your card)</label>
+        <input id="cid" autocapitalize="characters" spellcheck="false" maxlength="14" placeholder="ABCD-EFGH-JKMN"></div>
+      <label for="code">Access code (printed on your card)</label>
+      <input id="code" inputmode="numeric" maxlength="9" autocomplete="off" placeholder="1234-5678">
+      <label for="idx">Index number</label>
+      <input id="idx" inputmode="numeric" maxlength="9" autocomplete="off">
+      <div id="gname" hidden><label for="name">Full name (first time only)</label>
+        <input id="name" autocomplete="off" maxlength="80"></div>
+      <div id="gmaster" hidden><label for="master">Lecturer key</label>
+        <input id="master" type="password" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <p class="hint">Lecturer only. Skips the code and the one-phone lock for this card.</p></div>
+      <button id="go" type="submit">Enter the quiz</button>
+      <div id="msg" role="status" aria-live="polite"></div>
+      <p class="hint" id="ovrp"><a href="#" id="ovr">Problem entering? Lecturer override</a></p>
+    </form>
+    <p class="hint">Each card works once. Do not share it: it opens on the first phone that uses it.</p>
+  </div>
+
+  <!-- QUIZ -->
+  <div id="quiz" hidden>
+    <div id="timer"><div><div id="hello"></div><div id="sub"></div></div><div id="clock">--:--</div></div>
+    <div class="card" id="problem" oncontextmenu="return false">
+      <div id="wm"></div>
+      <div id="pbody"></div>
+    </div>
+    <div class="card" id="ansbox">
+      <strong>Answer form</strong>
+      <p class="hint">Type your answers in the answer form. It asks for your index number and the access code on your card, then Q1 to Q5. Your numbers on this page are yours alone.</p>
+      <a class="btn" id="formlink" href="#" target="_blank" rel="noopener noreferrer">Open the answer form</a>
+    </div>
+    <div class="card" id="over" hidden><strong>Time is up.</strong><p class="hint">Your problem is no longer shown. Answers submitted after the deadline are flagged.</p></div>
+  </div>
+</main>
+<script>
+(function () {
+  var API = 'https://script.google.com/macros/s/AKfycbz5eDIWKgR1cKuTKzKCu_HIky4g_hIT6c_civEEX-jo-yvkA9Ho2xFjTNP9-WIIoesV/exec';
+  var $ = function (id) { return document.getElementById(id); };
+  var f = $('f'), msg = $('msg'), go = $('go');
+  var token = '', fromLink = false, ovrOn = false, lockTimer = null, quizTimer = null, offset = 0, deadline = 0, cur = null;
+
+  // the card id comes from the QR code (?c=...) or is typed by hand; the token never stays in the address bar
+  try {
+    var p = new URLSearchParams(location.search).get('c');
+    if (p) { token = clean(p); fromLink = true; sessionStorage.setItem('cq_tok', token); history.replaceState(null, '', location.pathname); }
+    else { token = sessionStorage.getItem('cq_tok') || ''; fromLink = !!token; }
+  } catch (e) {}
+  function clean(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  function dev() {
+    try {
+      var d = localStorage.getItem('ce353dev');
+      if (!d) { d = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2) + Date.now()).slice(0, 36); localStorage.setItem('ce353dev', d); }
+      return d;
+    } catch (e) { return 'nostore-' + (window.__d = window.__d || String(Math.random()).slice(2, 14)); }
+  }
+  function post(body) {
+    return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
+  }
+  function say(t, cls) { msg.textContent = t; msg.className = cls || ''; }
+
+  // ---- landing: a link that was opened must be completed in time or the card locks
+  function lockBar(sec) {
+    var bar = $('lockbar'); clearInterval(lockTimer);
+    if (!sec) { bar.hidden = true; return; }
+    var end = Date.now() + sec * 1000; bar.hidden = false;
+    function t() { var s = Math.max(0, Math.round((end - Date.now()) / 1000)); bar.textContent = 'Enter your access code and index number within ' + s + ' s, or this card locks.'; if (!s) clearInterval(lockTimer); }
+    t(); lockTimer = setInterval(t, 1000);
+  }
+  function landing() {
+    $('gid').hidden = fromLink;                 // typed by hand: show the Card ID box
+    if (!fromLink) { $('entryhead').textContent = 'Type the details on your card'; return; }
+    say('Checking your card...');
+    post({ action: 'copen', token: token, dev: dev() }).then(function (j) {
+      if (j && j.ok) { say(''); if (j.state === 'opened') lockBar(j.lockSec); else say('This card is already running on this phone. Enter your code and index number to continue.', 'ok'); }
+      else { say((j && j.msg) || 'Something went wrong.', 'err'); if (j && j.locked) go.disabled = true; }
+    }).catch(function () { say('Network problem. Reload the page.', 'err'); });
+  }
+
+  // ---- entering
+  f.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    var tok = fromLink ? token : clean($('cid').value);
+    if (!tok) { say('Type the Card ID from your card.', 'err'); return; }
+    var body = { token: tok, idx: $('idx').value.trim(), code: $('code').value, name: $('name').value, dev: dev() };
+    if (ovrOn) { body.action = 'coverride'; body.master = $('master').value.trim(); if (!body.master) { say('Enter the lecturer key.', 'err'); return; } }
+    else { body.action = 'centry'; if (!body.idx) { say('Enter your index number.', 'err'); return; } if (!body.code) { say('Enter the access code from your card.', 'err'); return; } }
+    go.disabled = true; say('Checking...');
+    post(body).then(function (j) {
+      go.disabled = false;
+      if (j && j.ok) { token = tok; try { sessionStorage.setItem('cq_tok', tok); } catch (e) {} showQuiz(j); return; }
+      if (j && j.needName) { $('gname').hidden = false; $('name').focus(); say(j.msg, 'err'); return; }
+      say((j && j.msg) || 'Something went wrong.', 'err');
+      if (j && j.locked) { go.disabled = true; lockBar(0); }
+    }).catch(function () { go.disabled = false; say('Network problem. Try again.', 'err'); });
+  });
+  $('ovr').addEventListener('click', function (e) {
+    e.preventDefault(); ovrOn = true; $('gmaster').hidden = false; $('ovrp').hidden = true;
+    if (!fromLink) $('gid').hidden = false; $('master').focus();
+  });
+
+  // ---- the quiz view
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function showQuiz(j) {
+    cur = j; $('entry').hidden = true; $('quiz').hidden = false; clearInterval(lockTimer);
+    offset = j.now - Date.now(); deadline = j.deadline;
+    $('hello').textContent = 'Hello, ' + j.name;
+    $('sub').textContent = 'Index ' + j.idx + (j.kind === 'resume' ? ' (resumed)' : '') + '  |  ' + (j.title || 'Quiz');
+    var wm = (j.name + '  ' + j.idx + '    '); $('wm').textContent = new Array(120).join(wm);
+    if (j.formUrl) { $('formlink').href = j.formUrl; } else { $('ansbox').hidden = true; }
+    if (j.expired) { expire(); return; }
+    renderProblem(j.params);
+    clearInterval(quizTimer); quizTimer = setInterval(tick, 500); tick();
+    watch();
+  }
+  function tick() {
+    var left = Math.max(0, Math.round((deadline - (Date.now() + offset)) / 1000));
+    $('clock').textContent = pad(Math.floor(left / 60)) + ':' + pad(left % 60);
+    $('clock').className = left <= 60 ? 'low' : '';
+    if (left <= 0) { clearInterval(quizTimer); expire(); }
+  }
+  function expire() { $('pbody').innerHTML = ''; $('wm').textContent = ''; $('problem').hidden = true; $('over').hidden = false; $('clock').textContent = '00:00'; }
+
+  function diagram(P) {
+    var bf = P.bf, bw = P.bw, hf = P.hf, d = P.d, h = d + 50;
+    var s = Math.min(230 / bf, 250 / h), X0 = 190, Y0 = 46;       // section centre-line x, top y
+    var W = 380, H = Math.round(h * s) + 100;
+    var l = X0 - bf * s / 2, r = X0 + bf * s / 2, wl = X0 - bw * s / 2, wr = X0 + bw * s / 2;
+    var top = Y0, fb = Y0 + hf * s, bot = Y0 + h * s, yb = Y0 + (h - 50) * s;      // bars at 50 mm above the soffit
+    function arrow(x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#000" stroke-width="1" marker-start="url(#a)" marker-end="url(#a)"/>'; }
+    function ext(x1, y1, x2, y2) { return '<line x1="' + x1 + '" y1="' + y1 + '" x2="' + x2 + '" y2="' + y2 + '" stroke="#888" stroke-width=".8"/>'; }
+    var rb = Math.max(4, bw * s * 0.065), bx = bw * s * 0.275, o = '';
+    o += '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" role="img" aria-label="T-beam section">';
+    o += '<defs><marker id="a" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker></defs>';
+    o += '<polygon points="' + [l, top, r, top, r, fb, wr, fb, wr, bot, wl, bot, wl, fb, l, fb].join(' ') + '" fill="#e4e4e4" stroke="#000" stroke-width="1.6"/>';
+    [-bx, 0, bx].forEach(function (dx) { o += '<circle cx="' + (X0 + dx) + '" cy="' + yb + '" r="' + rb + '" fill="#000"/>'; });
+    o += ext(l, top, l, top - 24) + ext(r, top, r, top - 24) + arrow(l, top - 16, r, top - 16);
+    o += '<text x="' + X0 + '" y="' + (top - 22) + '" text-anchor="middle" font-size="14">b<tspan font-size="10" dy="3">f</tspan><tspan dy="-3"> = ' + bf + '</tspan></text>';
+    o += ext(l, top, l - 40, top) + ext(l, fb, l - 40, fb) + arrow(l - 30, top, l - 30, fb);
+    o += '<text x="' + (l - 36) + '" y="' + ((top + fb) / 2 + 5) + '" text-anchor="end" font-size="14">h<tspan font-size="10" dy="3">f</tspan><tspan dy="-3"> = ' + hf + '</tspan></text>';
+    o += ext(wl, bot, wl, bot + 26) + ext(wr, bot, wr, bot + 26) + arrow(wl, bot + 18, wr, bot + 18);
+    o += '<text x="' + X0 + '" y="' + (bot + 40) + '" text-anchor="middle" font-size="14">b<tspan font-size="10" dy="3">w</tspan><tspan dy="-3"> = ' + bw + '</tspan></text>';
+    o += ext(r, top, r + 46, top) + ext(X0 + bx, yb, r + 46, yb) + arrow(r + 36, top, r + 36, yb);
+    o += '<text x="' + (r + 40) + '" y="' + ((top + yb) / 2 + 5) + '" font-size="14">d = ' + d + '</text>';
+    o += '<line x1="' + (wl - 6) + '" y1="' + (bot + 4) + '" x2="' + (X0 - bx + 4) + '" y2="' + (yb + 4) + '" stroke="#000" stroke-width="1"/>';
+    o += '<text x="' + (wl - 10) + '" y="' + (bot + 14) + '" text-anchor="end" font-size="14">A<tspan font-size="10" dy="3">s</tspan></text>';
+    return o + '</svg>';
+  }
+  function renderProblem(P) {
+    var rows = [['Design sagging moment, M', P.M + ' kNm'], ['Flange width, bf', P.bf + ' mm'], ['Web width, bw', P.bw + ' mm'], ['Flange thickness, hf', P.hf + ' mm'],
+                ['Effective depth, d', P.d + ' mm'], ['Concrete strength, fcu', P.fcu + ' N/mm²'], ['Steel strength, fy', '500 N/mm²']];
+    var h = '<p><strong>Your T-beam.</strong> The section below carries a sagging moment. The numbers are yours alone.</p>' + diagram(P);
+    h += '<table class="d">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table>';
+    h += '<p>Use the BS 8110 rectangular stress block (s = 0.9x) and the Week 3 method for flanged beams. Give each answer as a number, to at least 1 decimal place for Q1 to Q4 and the nearest whole number for Q5.</p>';
+    h += '<ol class="q"><li><strong>Q1.</strong> The test moment Mf = 0.45 fcu bf hf (d − hf/2), in kNm.</li>' +
+         '<li><strong>Q2.</strong> The moment carried by the flange overhangs, Mov = 0.45 fcu (bf − bw) hf (d − hf/2), in kNm.</li>' +
+         '<li><strong>Q3.</strong> The depth of the stress block, s, in mm.</li>' +
+         '<li><strong>Q4.</strong> The neutral axis depth, x = s/0.9, in mm.</li>' +
+         '<li><strong>Q5.</strong> The tension steel area required, As, in mm².</li></ol>';
+    $('pbody').innerHTML = h;
+  }
+
+  // ---- deterrents and detection (the server also logs how long the page was in the background)
+  var hiddenAt = 0, wired = false;
+  function ping(type, sec) {
+    try { fetch(API, { method: 'POST', keepalive: true, headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify({ action: 'cevent', token: token, dev: dev(), type: type, sec: sec }) }); } catch (e) {}
+  }
+  function watch() {
+    if (wired) return; wired = true;
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) { hiddenAt = Date.now(); ping('hide'); }
+      else if (hiddenAt) { ping('show', (Date.now() - hiddenAt) / 1000); hiddenAt = 0; }
+    });
+    ['copy', 'cut', 'paste', 'dragstart', 'selectstart'].forEach(function (e) {
+      $('problem').addEventListener(e, function (ev) { ev.preventDefault(); });
+    });
+    document.addEventListener('keydown', function (ev) {
+      var k = (ev.key || '').toLowerCase();
+      if ((ev.ctrlKey || ev.metaKey) && ['p', 's', 'u', 'c', 'a'].indexOf(k) >= 0 && !/INPUT|TEXTAREA/.test((ev.target || {}).tagName || '')) ev.preventDefault();
+      if (k === 'printscreen') { try { navigator.clipboard.writeText(''); } catch (e) {} }
+    });
+  }
+
+  landing();
+})();
+</script>
+</body>
+</html>
