@@ -26,6 +26,8 @@
   #lockbar { margin:12px 0 0; padding:10px 12px; border-radius:8px; background:#fff4e5; color:#7a4b00; font-size:14px; }
   a { color:var(--green); }
   [hidden] { display:none !important; }
+  .spin { display:inline-block; width:16px; height:16px; border:3px solid #c5d6c7; border-top-color:var(--green); border-radius:50%; animation:sp .8s linear infinite; vertical-align:-3px; margin-right:6px; }
+  @keyframes sp { to { transform:rotate(360deg); } }
   /* quiz view */
   #hello { font-size:20px; font-weight:700; margin:0; }
   #sub { color:var(--muted); font-size:14px; margin:2px 0 0; }
@@ -111,7 +113,13 @@
   function post(body) {
     return fetch(API, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
   }
-  function say(t, cls) { msg.textContent = t; msg.className = cls || ''; }
+  var busyT = null;
+  function say(t, cls) { clearTimeout(busyT); msg.textContent = t; msg.className = cls || ''; }
+  function busy(t) {            // the server can take several seconds: show that it is working, not frozen
+    clearTimeout(busyT); msg.className = '';
+    msg.innerHTML = '<span class="spin"></span>' + t;
+    busyT = setTimeout(function () { msg.innerHTML = '<span class="spin"></span>Still working. This is slow, please wait and do not press again.'; }, 8000);
+  }
 
   // ---- landing: a link that was opened must be completed in time or the card locks
   function lockBar(sec) {
@@ -124,7 +132,7 @@
   function landing() {
     $('gid').hidden = fromLink;                 // typed by hand: show the Card ID box
     if (!fromLink) { $('entryhead').textContent = 'Type the details on your card'; return; }
-    say('Checking your card...');
+    busy('Checking your card. This can take a few seconds.');
     post({ action: 'copen', token: token, dev: dev() }).then(function (j) {
       if (j && j.ok) { say(''); if (j.state === 'opened') lockBar(j.lockSec); else say('This card is already running on this phone. Enter your code and index number to continue.', 'ok'); }
       else { say((j && j.msg) || 'Something went wrong.', 'err'); if (j && j.locked) go.disabled = true; }
@@ -139,7 +147,7 @@
     var body = { token: tok, idx: $('idx').value.trim(), code: $('code').value, name: $('name').value, dev: dev() };
     if (ovrOn) { body.action = 'coverride'; body.master = $('master').value.trim(); if (!body.master) { say('Enter the lecturer key.', 'err'); return; } }
     else { body.action = 'centry'; if (!body.idx) { say('Enter your index number.', 'err'); return; } if (!body.code) { say('Enter the access code from your card.', 'err'); return; } }
-    go.disabled = true; say('Checking...');
+    go.disabled = true; busy('Checking your details. This can take up to 10 seconds.');
     post(body).then(function (j) {
       go.disabled = false;
       if (j && j.ok) { token = tok; try { sessionStorage.setItem('cq_tok', tok); } catch (e) {} showQuiz(j); return; }
