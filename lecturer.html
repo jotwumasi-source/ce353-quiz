@@ -32,10 +32,13 @@
   .pill.opened { background:#fff4e5; color:#7a4b00; } .pill.new { background:#eee; color:#555; }
   .counts span { margin-right:14px; font-size:14px; }
   #tablewrap { max-height:480px; overflow:auto; }
+  #banner { position:sticky; top:0; z-index:9; text-align:center; font-weight:800; font-size:18px; letter-spacing:.03em; padding:12px; color:#fff; background:#777; }
+  #banner.open { background:#1b5e20; } #banner.closed { background:#b3261e; }
 </style>
 </head>
 <body>
 <header><h1>CE 353 Quiz: Lecturer console (cards)</h1></header>
+<div id="banner">Enter the admin key and press Load</div>
 <main>
   <div class="card">
     <div class="row">
@@ -61,7 +64,7 @@
       <button id="closeq" class="alt">Close entry</button>
     </div>
     <p class="meta" id="qinfo"></p>
-    <p class="meta">"Start a NEW quiz" makes the old cards stop working. Entry must be open for new cards to be used; students already inside can continue.</p>
+    <p class="meta">"Start a NEW quiz" stops every old card and closes entry (you must type NEW to confirm). Generating cards opens entry automatically. Students already inside can always finish.</p>
   </div>
 
   <div class="card">
@@ -97,7 +100,13 @@
   function say(t, bad) { $('note').textContent = t; $('note').className = 'meta' + (bad ? ' warn' : ''); }
   function short(t) { return t.slice(0, 4) + '-' + t.slice(4, 8) + '-' + t.slice(8, 12); }
   function link(id) { return new URL('q.html', location.href).href + '?c=' + id; }
-  function show(q) { $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | form ' + (q.formUrl ? 'set' : 'NOT set')) : 'No quiz yet. Press "Start a NEW quiz".'; }
+  function banner(q) {
+    var b = $('banner');
+    if (!q || !q.qid) { b.className = ''; b.textContent = 'NO QUIZ YET: press "Start a NEW quiz"'; return; }
+    b.className = q.open ? 'open' : 'closed';
+    b.textContent = q.open ? 'ENTRY OPEN: students can start with their cards' : 'ENTRY CLOSED: cards will not open until you press "Open entry"';
+  }
+  function show(q) { banner(q); $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | form ' + (q.formUrl ? 'set' : 'NOT set')) : 'No quiz yet. Press "Start a NEW quiz".'; }
   function fields() { return { title: $('title').value, minutes: +$('mins').value, formUrl: $('form').value.trim() }; }
   function remember() { try { sessionStorage.setItem('adm', key.value); } catch (e) {} }
 
@@ -125,7 +134,8 @@
   $('load').addEventListener('click', function () { refresh(); auto(); });
   $('refresh').addEventListener('click', refresh);
   $('newq').addEventListener('click', function () {
-    if (!confirm('Start a NEW quiz? Cards from the current quiz stop working.')) return;
+    var a = prompt('Starting a NEW quiz stops EVERY current card from working and closes entry. Type NEW to confirm.');
+    if ((a || '').trim().toUpperCase() !== 'NEW') { say('Cancelled. The current quiz and its cards are unchanged.'); return; }
     var f = fields(); f.fresh = true; f.open = false;
     post(Object.assign({ action: 'cquiz' }, f)).then(function (j) { if (!j.ok) { say(j.msg, true); return; } say('New quiz created. Generate cards next.'); newCards = []; show(j.quiz); refresh(); auto(); });
   });
@@ -141,7 +151,10 @@
       $('gen').disabled = false;
       if (!j.ok) { say(j.msg || 'Could not generate.', true); return; }
       newCards = j.cards; $('print').disabled = false; $('csv').disabled = false;
-      say(n + ' cards generated. Print or download them NOW: the access codes are not shown again.'); refresh(); auto();
+      post({ action: 'cquiz', open: true }).then(function (o) {
+        say(n + ' cards generated' + (o.ok ? ' and entry is now OPEN' : ' (entry could NOT be opened: press Open entry)') + '. Print or download them NOW: the access codes are not shown again.', !o.ok);
+        if (o.ok) show(o.quiz); refresh(); auto();
+      });
     }).catch(function () { $('gen').disabled = false; say('Network problem.', true); });
   });
   $('csv').addEventListener('click', function () {
