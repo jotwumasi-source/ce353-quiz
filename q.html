@@ -109,7 +109,7 @@
     if (p) { token = clean(p); fromLink = true; sessionStorage.setItem('cq_tok', token); history.replaceState(null, '', location.pathname); }
     else { token = sessionStorage.getItem('cq_tok') || ''; fromLink = !!token; }
   } catch (e) {}
-  function clean(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); }
+  function clean(s) { return String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '').replace(/1/g, 'I').replace(/0/g, 'O'); }
   function dev() {
     try {
       var d = localStorage.getItem('ce353dev');
