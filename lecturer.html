@@ -55,7 +55,7 @@
       <div><label for="mins">Minutes</label><input id="mins" type="number" value="20" min="1" max="240" style="width:90px"></div>
     </div>
     <div class="row" style="margin-top:10px">
-      <div><label for="tpl">Question set (students type answers on their own page; no Form needed)</label><select id="tpl"><option value="L">L-beam, neutral axis in the flange</option><option value="T">T-beam, neutral axis in the web</option></select></div>
+      <div><label for="tpl">Question set (students type answers on their own page; no Form needed)</label><select id="tpl"><option value="B">Mixed beam problems (bending, shear, deflection; simply supported and continuous)</option><option value="L">L-beam, neutral axis in the flange</option><option value="T">T-beam, neutral axis in the web</option></select></div>
     </div>
     <div class="row" style="margin-top:10px">
       <button id="newq">Start a NEW quiz</button>
@@ -107,7 +107,7 @@
     b.className = q.open ? 'open' : 'closed';
     b.textContent = q.open ? 'ENTRY OPEN: students can start with their cards' : 'ENTRY CLOSED: cards will not open until you press "Open entry"';
   }
-  function show(q) { banner(q); $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | ' + (q.tp === 'L' ? 'L-beam' : 'T-beam')) : 'No quiz yet. Press "Start a NEW quiz".'; }
+  function show(q) { banner(q); $('qinfo').textContent = q && q.qid ? ('Quiz ' + q.qid + ': ' + (q.title || '(no title)') + ' | ' + q.minutes + ' min | entry ' + (q.open ? 'OPEN' : 'CLOSED') + ' | ' + (q.tp === 'B' ? 'mixed beam problems' : q.tp === 'L' ? 'L-beam' : 'T-beam')) : 'No quiz yet. Press "Start a NEW quiz".'; }
   function fields() { return { title: $('title').value, minutes: +$('mins').value, template: $('tpl').value }; }
   function remember() { try { sessionStorage.setItem('adm', key.value); } catch (e) {} }
 
