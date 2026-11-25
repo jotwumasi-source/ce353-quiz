@@ -199,12 +199,18 @@
   var N = 5, submitted = false, finalSent = false, dirty = false, saveT = null, armT = null;
   var LABELS = {
     T: [['Q1 Mf', 'kNm'], ['Q2 Mov', 'kNm'], ['Q3 s', 'mm'], ['Q4 x', 'mm'], ['Q5 As', 'mm²']],
-    L: [['Q1 bf', 'mm'], ['Q2 Mf', 'kNm'], ['Q3 z', 'mm'], ['Q4 x', 'mm'], ['Q5 As', 'mm²']]
+    L: [['Q1 bf', 'mm'], ['Q2 Mf', 'kNm'], ['Q3 z', 'mm'], ['Q4 x', 'mm'], ['Q5 As', 'mm²']],
+    B1: [['Q1 M', 'kNm'], ['Q2 K', ''], ['Q3 z', 'mm'], ['Q4 As', 'mm²']],
+    B2: [['Q1 V', 'kN'], ['Q2 v', 'N/mm²'], ['Q3 vc', 'N/mm²'], ['Q4 Asv/sv', 'mm²/m']],
+    B3: [['Q1 fs', 'N/mm²'], ['Q2 M/bd²', 'N/mm²'], ['Q3 MFt', ''], ['Q4 allowable l/d', '']],
+    B4: [['Q1 F', 'kN'], ['Q2 sagging M', 'kNm'], ['Q3 hogging M', 'kNm'], ['Q4 As (support)', 'mm²']],
+    B5: [['Q1 F', 'kN'], ['Q2 V', 'kN'], ['Q3 v', 'N/mm²'], ['Q4 vc', 'N/mm²']]
   };
+  function labKey(P) { return P && P.tp === 'B' ? 'B' + P.f : ((P && P.tp) || 'T'); }
   function vals() { var a = []; for (var i = 0; i < N; i++) { var el = $('a' + i); a.push(el ? el.value : ''); } return a; }
   function amsg(t, cls) { $('amsg').textContent = t; $('amsg').className = cls || ''; }
   function buildAnswers(j) {
-    var lab = LABELS[(j.params && j.params.tp) || 'T']; N = lab.length;
+    var lab = LABELS[labKey(j.params)]; N = lab.length;
     $('alist').innerHTML = lab.map(function (l, i) {
       return '<div class="arow"><label for="a' + i + '">' + l[0] + '</label><input id="a' + i + '" inputmode="decimal" autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="24"><span class="u">' + l[1] + '</span></div>';
     }).join('');
@@ -303,7 +309,58 @@
          '<li><strong>Q5.</strong> The tension steel area required, As, in mm².</li></ol>';
     $('pbody').innerHTML = h;
   }
-  function renderProblem(P) { if (P && P.tp === 'L') renderL(P); else renderT(P); }
+
+  // ---- mixed beam problems (quiz 6): five families, one per card
+  function beamSVG(spans, lab) {            // plain elevation: simple beam or three equal spans, UDL arrows, span label
+    var W = 460, n = spans, sw = n === 1 ? 300 : 120, x0 = (W - sw * n) / 2, y = 70, H = 150, o = '';
+    o += '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" role="img" aria-label="beam elevation">';
+    o += '<defs><marker id="b" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#000"/></marker></defs>';
+    var total = sw * n, k;
+    for (k = 0; k <= Math.round(total / 20); k++) { var xx = x0 + k * total / Math.round(total / 20); o += '<line x1="' + xx + '" y1="30" x2="' + xx + '" y2="' + (y - 4) + '" stroke="#000" stroke-width="1" marker-end="url(#b)"/>'; }
+    o += '<line x1="' + x0 + '" y1="30" x2="' + (x0 + total) + '" y2="30" stroke="#000" stroke-width="1"/>';
+    o += '<rect x="' + x0 + '" y="' + y + '" width="' + total + '" height="9" fill="#e4e4e4" stroke="#000" stroke-width="1.4"/>';
+    for (k = 0; k <= n; k++) { var sx = x0 + k * sw; o += '<polygon points="' + [sx, y + 9, sx - 9, y + 25, sx + 9, y + 25].join(' ') + '" fill="#fff" stroke="#000" stroke-width="1.2"/>'; }
+    o += '<text x="' + (W / 2) + '" y="20" text-anchor="middle" font-size="14">' + lab + '</text>';
+    o += '<line x1="' + x0 + '" y1="116" x2="' + (x0 + sw) + '" y2="116" stroke="#000" stroke-width="1" marker-start="url(#b)" marker-end="url(#b)"/>';
+    o += '<text x="' + (x0 + sw / 2) + '" y="134" text-anchor="middle" font-size="14">span l' + (n > 1 ? ' (three equal spans)' : '') + '</text>';
+    return o + '</svg>';
+  }
+  function tbl(rows) { return '<table class="d">' + rows.map(function (r) { return '<tr><td>' + r[0] + '</td><td>' + r[1] + '</td></tr>'; }).join('') + '</table>'; }
+  function qlist(a) { return '<ol class="q">' + a.map(function (t, i) { return '<li><strong>Q' + (i + 1) + '.</strong> ' + t + '</li>'; }).join('') + '</ol>'; }
+  function renderB(P) {
+    var common = [['Concrete strength, fcu', P.fcu + ' N/mm²'], ['Steel strength, fy', '500 N/mm²']], h = '', rows, ans = ' Give each answer as a number: K, v, vc and the modification factors to 3 decimals, other values to 1 decimal, steel areas to the nearest whole number.';
+    if (P.f === 1) {
+      rows = [['Simply supported span, l', P.L + ' m'], ['Design ultimate load (including self-weight), w', P.w + ' kN/m'], ['Beam width, b', P.b + ' mm'], ['Effective depth, d', P.d + ' mm']].concat(common);
+      h = '<p><strong>Your beam.</strong> A simply supported rectangular beam carries a uniformly distributed ultimate load. The numbers are yours alone.</p>' + beamSVG(1, 'w kN/m (ultimate)') + tbl(rows);
+      h += '<p>Use BS 8110: K = M/(fcu b d²), z = d[0.5 + √(0.25 − K/0.9)] but not more than 0.95d, As = M/(0.87 fy z).' + ans + '</p>';
+      h += qlist(['The maximum design moment, M = wl²/8, in kNm.', 'K = M/(fcu b d²) (no unit).', 'The lever arm, z, in mm.', 'The tension steel required, As, in mm².']);
+    } else if (P.f === 2) {
+      rows = [['Simply supported span, l', P.L + ' m'], ['Design ultimate load (including self-weight), w', P.w + ' kN/m'], ['Beam width, b', P.b + ' mm'], ['Effective depth, d', P.d + ' mm'],
+              ['Tension steel at the support, As', P.bar + ' (' + P.As + ' mm²)'], ['Links', 'mild steel, fyv = 250 N/mm²']].concat(common);
+      h = '<p><strong>Your beam.</strong> Check the shear at the support of a simply supported rectangular beam. The numbers are yours alone.</p>' + beamSVG(1, 'w kN/m (ultimate)') + tbl(rows);
+      h += '<p>Use BS 8110: v = V/(bd); vc = 0.79 (100As/bd)<sup>1/3</sup> (400/d)<sup>1/4</sup> (fcu/25)<sup>1/3</sup> / 1.25 (take 400/d not less than 1, fcu not more than 40); where v exceeds vc + 0.4, Asv/sv = b(v − vc)/(0.87 fyv).' + ans + '</p>';
+      h += qlist(['The design shear force at the support, V = wl/2, in kN.', 'The shear stress, v, in N/mm².', 'The concrete shear stress, vc, in N/mm².', 'The links required, Asv/sv, in mm² per metre length of beam.']);
+    } else if (P.f === 3) {
+      rows = [[P.cont ? 'Continuous beam, effective span, l' : 'Simply supported span, l', P.L + ' m'], ['Beam width, b', P.b + ' mm'], ['Effective depth, d', P.d + ' mm'], ['Design moment at mid-span, M', P.M + ' kNm'],
+              ['Tension steel required, As,req', P.Areq + ' mm²'], ['Tension steel provided, As,prov', P.bar + ' (' + P.As + ' mm²)'], ['Basic span/effective depth ratio (Table 3.9)', String(P.basic)]].concat(common);
+      h = '<p><strong>Your beam.</strong> Check the deflection of a rectangular beam by the span/effective depth method. The numbers are yours alone.</p>' + beamSVG(1, P.cont ? 'continuous beam, one span' : 'simply supported beam') + tbl(rows);
+      h += '<p>Use BS 8110 Table 3.10 with fs = (5/8) fy (As,req/As,prov) and MFt = 0.55 + (477 − fs)/[120(0.9 + M/bd²)] (not more than 2.0). The allowable span/depth ratio is the basic ratio × MFt.' + ans + '</p>';
+      h += qlist(['The service stress, fs, in N/mm².', 'M/(bd²), in N/mm².', 'The modification factor, MFt (no unit).', 'The allowable span/effective depth ratio (no unit).']);
+    } else if (P.f === 4) {
+      rows = [['Span (each of three equal spans), l', P.L + ' m'], ['Characteristic dead load, gk', P.gk + ' kN/m'], ['Characteristic imposed load, qk', P.qk + ' kN/m'], ['Beam width, b', P.b + ' mm'], ['Effective depth, d', P.d + ' mm']].concat(common);
+      h = '<p><strong>Your beam.</strong> A three-span continuous rectangular beam carries uniform loads (qk is not more than gk). The numbers are yours alone.</p>' + beamSVG(3, 'gk and qk (kN/m)') + tbl(rows);
+      h += '<p>Use BS 8110 Table 3.5 with F = total ultimate load on a span = (1.4gk + 1.6qk) l: sagging moment in the end span 0.09 F l, hogging moment at the first interior support 0.11 F l. Design the support section as a rectangular beam: K = M/(fcu b d²), z = d[0.5 + √(0.25 − K/0.9)] (not more than 0.95d), As = M/(0.87 fy z).' + ans + '</p>';
+      h += qlist(['The total ultimate load on one span, F, in kN.', 'The sagging moment in the end span, in kNm.', 'The hogging moment at the first interior support, in kNm.', 'The tension steel required at the first interior support (top), As, in mm².']);
+    } else {
+      rows = [['Span (each of three equal spans), l', P.L + ' m'], ['Characteristic dead load, gk', P.gk + ' kN/m'], ['Characteristic imposed load, qk', P.qk + ' kN/m'], ['Beam width, b', P.b + ' mm'], ['Effective depth, d', P.d + ' mm'],
+              ['Tension steel at the support, As', P.bar + ' (' + P.As + ' mm²)']].concat(common);
+      h = '<p><strong>Your beam.</strong> Check the shear at the first interior support of a three-span continuous rectangular beam (qk is not more than gk). The numbers are yours alone.</p>' + beamSVG(3, 'gk and qk (kN/m)') + tbl(rows);
+      h += '<p>Use BS 8110 Table 3.5 with F = (1.4gk + 1.6qk) l: shear at the first interior support 0.6 F. Then v = V/(bd) and vc = 0.79 (100As/bd)<sup>1/3</sup> (400/d)<sup>1/4</sup> (fcu/25)<sup>1/3</sup> / 1.25 (400/d not less than 1, fcu not more than 40).' + ans + '</p>';
+      h += qlist(['The total ultimate load on one span, F, in kN.', 'The shear force at the first interior support, V = 0.6F, in kN.', 'The shear stress, v, in N/mm².', 'The concrete shear stress, vc, in N/mm².']);
+    }
+    $('pbody').innerHTML = h;
+  }
+  function renderProblem(P) { if (P && P.tp === 'B') renderB(P); else if (P && P.tp === 'L') renderL(P); else renderT(P); }
   function renderT(P) {
     var rows = [['Design sagging moment, M', P.M + ' kNm'], ['Flange width, bf', P.bf + ' mm'], ['Web width, bw', P.bw + ' mm'], ['Flange thickness, hf', P.hf + ' mm'],
                 ['Effective depth, d', P.d + ' mm'], ['Concrete strength, fcu', P.fcu + ' N/mm²'], ['Steel strength, fy', '500 N/mm²']];
